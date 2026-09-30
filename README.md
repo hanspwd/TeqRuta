@@ -1,6 +1,6 @@
-# TeqRuta - MVP
+# TeqRuta
 
-TeqRuta es una plataforma diseñada para digitalizar y optimizar el registro de traslados, odometría y peajes de técnicos en terreno. Este MVP (Producto Mínimo Viable) implementa la estructura central definida en la Especificación de Requisitos de Software (ERS).
+TeqRuta es una plataforma diseñada para digitalizar y optimizar el registro de traslados, odometría y peajes de técnicos en terreno, al igual que constatar gastos.
 
 ## Arquitectura del Proyecto
 
