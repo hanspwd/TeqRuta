@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.ui.Modifier
 import com.teqmed.teqruta.ui.theme.TeqRutaTheme
-import com.teqmed.teqruta.ui.screens.ViajeScreen
 import com.teqmed.teqruta.viewmodel.ViajeViewModel
 
 class MainActivity : ComponentActivity() {
@@ -26,7 +25,7 @@ class MainActivity : ComponentActivity() {
                     // Padding is applied internally by the screen if needed, 
                     // or wrapped around the screen
                     androidx.compose.foundation.layout.Box(modifier = Modifier.padding(innerPadding)) {
-                        ViajeScreen(viewModel = viajeViewModel)
+                        com.teqmed.teqruta.ui.screens.AppNavigation(viewModel = viajeViewModel)
                     }
                 }
             }
