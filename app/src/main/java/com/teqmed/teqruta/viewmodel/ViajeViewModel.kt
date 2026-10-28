@@ -42,10 +42,10 @@ class ViajeViewModel(application: Application) : AndroidViewModel(application) {
     // Form: Inicio
     private val _odometroInicio = MutableStateFlow("")
     val odometroInicio: StateFlow<String> = _odometroInicio
-    
+
     private val _odometroInicioError = MutableStateFlow<String?>(null)
     val odometroInicioError: StateFlow<String?> = _odometroInicioError
-    
+
     private val _fotoInicioBitmap = MutableStateFlow<Bitmap?>(null)
     val fotoInicioBitmap: StateFlow<Bitmap?> = _fotoInicioBitmap
 
@@ -55,10 +55,10 @@ class ViajeViewModel(application: Application) : AndroidViewModel(application) {
     // Form: Peajes & Eventos
     private val _peajes = MutableStateFlow<List<PeajeInfo>>(emptyList())
     val peajes: StateFlow<List<PeajeInfo>> = _peajes
-    
+
     private val _montoPeajeInput = MutableStateFlow("")
     val montoPeajeInput: StateFlow<String> = _montoPeajeInput
-    
+
     private val _montoPeajeError = MutableStateFlow<String?>(null)
     val montoPeajeError: StateFlow<String?> = _montoPeajeError
 
@@ -67,14 +67,18 @@ class ViajeViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _eventos = MutableStateFlow<List<String>>(emptyList())
     val eventos: StateFlow<List<String>> = _eventos
-    
+
     private val _eventoInput = MutableStateFlow("")
     val eventoInput: StateFlow<String> = _eventoInput
+
+    // Foto específica para la bitácora/evento
+    private val _fotoBitacoraActual = MutableStateFlow<Bitmap?>(null)
+    val fotoBitacoraActual: StateFlow<Bitmap?> = _fotoBitacoraActual
 
     // Form: Fin
     private val _odometroFin = MutableStateFlow("")
     val odometroFin: StateFlow<String> = _odometroFin
-    
+
     private val _odometroFinError = MutableStateFlow<String?>(null)
     val odometroFinError: StateFlow<String?> = _odometroFinError
 
@@ -150,7 +154,7 @@ class ViajeViewModel(application: Application) : AndroidViewModel(application) {
         viajeDao.insertViaje(sample2)
     }
 
-    // Input handlers with real-time validation (IE 2.2.1)
+    // Input handlers with real-time validation
     fun onRutaChange(ruta: String) { _rutaSeleccionada.value = ruta }
     fun onVehiculoChange(vehiculo: String) { _vehiculoPatente.value = vehiculo }
 
@@ -189,6 +193,10 @@ class ViajeViewModel(application: Application) : AndroidViewModel(application) {
         _eventoInput.value = valor
     }
 
+    fun onFotoBitacoraTomada(bitmap: Bitmap) {
+        _fotoBitacoraActual.value = bitmap
+    }
+
     fun agregarPeaje() {
         val valResult = ValidationUtils.validateMontoPeaje(_montoPeajeInput.value)
         if (!valResult.isValid) {
@@ -199,7 +207,7 @@ class ViajeViewModel(application: Application) : AndroidViewModel(application) {
         val list = _peajes.value.toMutableList()
         list.add(PeajeInfo(monto = monto, bitmap = _fotoPeajeActual.value))
         _peajes.value = list
-        
+
         // Reset peaje fields
         _montoPeajeInput.value = ""
         _montoPeajeError.value = null
@@ -217,6 +225,7 @@ class ViajeViewModel(application: Application) : AndroidViewModel(application) {
             list.add("${System.currentTimeMillis()}|${_eventoInput.value.trim()}")
             _eventos.value = list
             _eventoInput.value = ""
+            _fotoBitacoraActual.value = null
         }
     }
 
@@ -226,8 +235,7 @@ class ViajeViewModel(application: Application) : AndroidViewModel(application) {
             _odometroInicioError.value = valResult.errorMessage ?: "Debe tomar foto del odómetro inicial"
             return
         }
-        
-        // Native Location GPS Access (IE 2.4.1)
+
         val coords = LocationHelper.getCurrentLocation(context)
         _locationInicio.value = coords
 
@@ -243,7 +251,6 @@ class ViajeViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
 
-        // Native Location GPS Access (IE 2.4.1)
         val coords = LocationHelper.getCurrentLocation(context)
         _locationFin.value = coords
 
@@ -257,7 +264,7 @@ class ViajeViewModel(application: Application) : AndroidViewModel(application) {
         _odometroInicioError.value = null
         _fotoInicioBitmap.value = null
         _locationInicio.value = null
-        
+
         _odometroFin.value = ""
         _odometroFinError.value = null
         _fotoFinBitmap.value = null
@@ -270,6 +277,7 @@ class ViajeViewModel(application: Application) : AndroidViewModel(application) {
 
         _eventos.value = emptyList()
         _eventoInput.value = ""
+        _fotoBitacoraActual.value = null
         horaInicioViaje = 0L
     }
 
@@ -279,7 +287,7 @@ class ViajeViewModel(application: Application) : AndroidViewModel(application) {
             val fin = _odometroFin.value.toIntOrNull() ?: 0
             val totalPeajes = _peajes.value.sumOf { it.monto }
             val eventosStr = _eventos.value.joinToString(";")
-            
+
             val viaje = Viaje(
                 rutaSeleccionada = _rutaSeleccionada.value,
                 odometroInicio = inicio,
@@ -305,7 +313,6 @@ class ViajeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // Actions for Jefe / Admin dashboards
     fun cambiarEstadoAprobacion(uuid: String, nuevoEstado: String) {
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             viajeDao.actualizarEstadoAprobacion(uuid, nuevoEstado)

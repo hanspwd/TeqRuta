@@ -8,7 +8,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
-import androidx.compose.material.icons.automirrored.outlined.FactCheck
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
@@ -89,8 +88,13 @@ fun JefeDashboard(viewModel: ViajeViewModel = androidx.lifecycle.viewmodel.compo
     val pendientes = viajes.filter { it.estadoAprobacion == "PENDIENTE" }
     val aprobados = viajes.filter { it.estadoAprobacion == "APROBADO" }
 
-    var selectedViajeForDialog by remember { mutableStateOf<Viaje?>(null) }
-    var observationText by remember { mutableStateOf("") }
+    var selectedViajeForRejectDialog by remember { mutableStateOf<Viaje?>(null) }
+    var selectedViajeForDetailModal by remember { mutableStateOf<Viaje?>(null) }
+    var rejectionReasonText by remember { mutableStateOf("") }
+
+    var showRejectNotificationPopup by remember { mutableStateOf(false) }
+    var rejectedTechnicianEmail by remember { mutableStateOf("") }
+    var rejectedRouteName by remember { mutableStateOf("") }
 
     Column(
         modifier = Modifier
@@ -114,7 +118,6 @@ fun JefeDashboard(viewModel: ViajeViewModel = androidx.lifecycle.viewmodel.compo
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Metrics Row
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -123,7 +126,7 @@ fun JefeDashboard(viewModel: ViajeViewModel = androidx.lifecycle.viewmodel.compo
                 title = "Por Aprobar",
                 value = pendientes.size.toString(),
                 subtitle = "Viajes pendientes",
-                icon = Icons.AutoMirrored.Outlined.FactCheck,
+                icon = Icons.Default.FactCheck,
                 accentColor = WarningYellow,
                 modifier = Modifier.weight(1f)
             )
@@ -196,34 +199,50 @@ fun JefeDashboard(viewModel: ViajeViewModel = androidx.lifecycle.viewmodel.compo
                             color = SuccessGreen
                         )
 
-                        Spacer(modifier = Modifier.height(12.dp))
+                        Spacer(modifier = Modifier.height(14.dp))
 
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.End,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             OutlinedButton(
-                                onClick = { selectedViajeForDialog = viaje },
+                                onClick = { selectedViajeForDetailModal = viaje },
                                 shape = RoundedCornerShape(10.dp),
-                                colors = ButtonDefaults.outlinedButtonColors(contentColor = ErrorRed)
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.primary),
+                                modifier = Modifier.weight(1f)
                             ) {
-                                Icon(Icons.Default.Visibility, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Icon(Icons.Default.Info, contentDescription = null, modifier = Modifier.size(15.dp))
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text("Observar")
+                                Text("Detalle", style = MaterialTheme.typography.labelMedium)
                             }
-                            Spacer(modifier = Modifier.width(8.dp))
+
+                            OutlinedButton(
+                                onClick = { selectedViajeForRejectDialog = viaje },
+                                shape = RoundedCornerShape(10.dp),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = ErrorRed),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(15.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Rechazar", style = MaterialTheme.typography.labelMedium)
+                            }
+
                             Button(
                                 onClick = {
                                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                     viewModel.cambiarEstadoAprobacion(viaje.uuid, "APROBADO")
                                 },
                                 shape = RoundedCornerShape(10.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = SuccessGreen)
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = SuccessGreen),
+                                modifier = Modifier.weight(1f)
                             ) {
-                                Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(15.dp))
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text("Aprobar")
+                                Text("Aprobar", style = MaterialTheme.typography.labelMedium)
                             }
                         }
                     }
@@ -232,19 +251,18 @@ fun JefeDashboard(viewModel: ViajeViewModel = androidx.lifecycle.viewmodel.compo
         }
     }
 
-    // Observation Dialog
-    if (selectedViajeForDialog != null) {
+    if (selectedViajeForRejectDialog != null) {
         AlertDialog(
-            onDismissRequest = { selectedViajeForDialog = null },
-            title = { Text("Registrar Observación") },
+            onDismissRequest = { selectedViajeForRejectDialog = null },
+            title = { Text("Rechazar Viaje") },
             text = {
                 Column {
-                    Text("Indique la discrepancia encontrada para el viaje a ${selectedViajeForDialog?.rutaSeleccionada}:")
+                    Text("Indique el motivo del rechazo para el viaje de ${selectedViajeForRejectDialog?.tecnicoEmail}:")
                     Spacer(modifier = Modifier.height(8.dp))
                     OutlinedTextField(
-                        value = observationText,
-                        onValueChange = { observationText = it },
-                        label = { Text("Motivo / Observación") },
+                        value = rejectionReasonText,
+                        onValueChange = { rejectionReasonText = it },
+                        label = { Text("Motivo / Discrepancia") },
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
@@ -252,20 +270,96 @@ fun JefeDashboard(viewModel: ViajeViewModel = androidx.lifecycle.viewmodel.compo
             confirmButton = {
                 Button(
                     onClick = {
-                        selectedViajeForDialog?.let {
-                            viewModel.cambiarEstadoAprobacion(it.uuid, "OBSERVADO")
+                        val viajeRechazado = selectedViajeForRejectDialog
+                        viajeRechazado?.let {
+                            viewModel.cambiarEstadoAprobacion(it.uuid, "RECHAZADO")
+                            rejectedTechnicianEmail = it.tecnicoEmail
+                            rejectedRouteName = it.rutaSeleccionada
                         }
-                        selectedViajeForDialog = null
-                        observationText = ""
+                        selectedViajeForRejectDialog = null
+                        rejectionReasonText = ""
+                        showRejectNotificationPopup = true
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = ErrorRed)
+                    colors = ButtonDefaults.buttonColors(containerColor = ErrorRed),
+                    shape = RoundedCornerShape(10.dp)
                 ) {
-                    Text("Guardar Observación")
+                    Text("Confirmar Rechazo")
                 }
             },
             dismissButton = {
-                TextButton(onClick = { selectedViajeForDialog = null }) {
+                TextButton(onClick = { selectedViajeForRejectDialog = null }) {
                     Text("Cancelar")
+                }
+            }
+        )
+    }
+
+    if (showRejectNotificationPopup) {
+        AlertDialog(
+            onDismissRequest = { showRejectNotificationPopup = false },
+            icon = {
+                Icon(Icons.Default.Email, contentDescription = null, tint = ErrorRed, modifier = Modifier.size(36.dp))
+            },
+            title = { Text(text = "Notificación Enviada", fontWeight = FontWeight.Bold) },
+            text = {
+                Text(
+                    text = "Se ha enviado un correo electrónico de notificación a ($rejectedTechnicianEmail) solicitando la justificación y corrección del viaje ($rejectedRouteName).",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            },
+            confirmButton = {
+                Button(onClick = { showRejectNotificationPopup = false }, shape = RoundedCornerShape(10.dp)) {
+                    Text("Entendido")
+                }
+            }
+        )
+    }
+
+    if (selectedViajeForDetailModal != null) {
+        val viaje = selectedViajeForDetailModal!!
+        val dist = (viaje.odometroFin - viaje.odometroInicio).coerceAtLeast(0)
+
+        AlertDialog(
+            onDismissRequest = { selectedViajeForDetailModal = null },
+            title = { Text(text = "Detalle Completo del Viaje", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
+                    Text("Ruta: ${viaje.rutaSeleccionada}", fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text("Técnico: ${viaje.tecnicoEmail}", style = MaterialTheme.typography.bodySmall)
+                    Text("Patente Vehículo: ${viaje.vehiculoPatente}", style = MaterialTheme.typography.bodySmall)
+                    Text("Fecha: ${FormatUtils.formatDateTime(viaje.horaInicio)}", style = MaterialTheme.typography.bodySmall)
+
+                    Spacer(modifier = Modifier.height(10.dp))
+                    HorizontalDivider()
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Text("Odometría Inicial: ${FormatUtils.formatNumber(viaje.odometroInicio)} km", style = MaterialTheme.typography.bodySmall)
+                    Text("Odometría Final: ${FormatUtils.formatNumber(viaje.odometroFin)} km", style = MaterialTheme.typography.bodySmall)
+                    Text("Distancia Total Recorrida: ${FormatUtils.formatNumber(dist)} km", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                    Text("Total Peajes: ${FormatUtils.formatCurrency(viaje.totalMontoPeajes)}", style = MaterialTheme.typography.bodySmall, color = SuccessGreen)
+
+                    Spacer(modifier = Modifier.height(10.dp))
+                    HorizontalDivider()
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Text("Ubicación GPS Inicio:", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelSmall)
+                    Text(if (viaje.latitudInicio != null && viaje.longitudInicio != null) FormatUtils.formatGps(viaje.latitudInicio, viaje.longitudInicio) else "No disponible", style = MaterialTheme.typography.bodySmall)
+
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text("Ubicación GPS Fin:", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelSmall)
+                    Text(if (viaje.latitudFin != null && viaje.longitudFin != null) FormatUtils.formatGps(viaje.latitudFin, viaje.longitudFin) else "Pendiente", style = MaterialTheme.typography.bodySmall)
+
+                    if (viaje.eventosExtra.isNotBlank()) {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Text("Bitácora / Observaciones:", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelSmall)
+                        Text(viaje.eventosExtra.replace(";", "\n• "), style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            },
+            confirmButton = {
+                Button(onClick = { selectedViajeForDetailModal = null }, shape = RoundedCornerShape(10.dp)) {
+                    Text("Cerrar")
                 }
             }
         )
@@ -275,7 +369,7 @@ fun JefeDashboard(viewModel: ViajeViewModel = androidx.lifecycle.viewmodel.compo
 @Composable
 fun GerenciaDashboard() {
     val haptic = LocalHapticFeedback.current
-    var showExportSnackbar by remember { mutableStateOf(false) }
+    var showExportPopup by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -299,7 +393,6 @@ fun GerenciaDashboard() {
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Metrics Grid
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             MetricSummaryCard(
                 title = "Gasto Total Mes",
@@ -349,7 +442,7 @@ fun GerenciaDashboard() {
                 Button(
                     onClick = {
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        showExportSnackbar = true
+                        showExportPopup = true
                     },
                     shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.fillMaxWidth()
@@ -360,30 +453,53 @@ fun GerenciaDashboard() {
                 }
             }
         }
+    }
 
-        if (showExportSnackbar) {
-            Spacer(modifier = Modifier.height(16.dp))
-            Surface(
-                color = SuccessGreen.copy(alpha = 0.15f),
-                shape = RoundedCornerShape(12.dp),
-                border = androidx.compose.foundation.BorderStroke(1.dp, SuccessGreen),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Row(
-                    modifier = Modifier.padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
+    if (showExportPopup) {
+        AlertDialog(
+            onDismissRequest = { showExportPopup = false },
+            icon = { Icon(Icons.Default.CheckCircle, contentDescription = null, tint = SuccessGreen, modifier = Modifier.size(36.dp)) },
+            title = { Text(text = "¡Reporte Exportado!", fontWeight = FontWeight.Bold) },
+            text = {
+                Text(
+                    text = "El archivo CSV ha sido generado correctamente y guardado en Descargas/TeqRuta_Mayo_2025.csv",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        showExportPopup = false
+                    },
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                 ) {
-                    Icon(Icons.Default.CheckCircle, contentDescription = null, tint = SuccessGreen)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Reporte exportado exitosamente a Descargas/TeqRuta_Mayo_2025.csv", style = MaterialTheme.typography.bodySmall, color = SuccessGreen)
+                    Icon(Icons.Default.FolderOpen, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Abrir Reporte")
                 }
+            },
+            dismissButton = {
+                TextButton(onClick = { showExportPopup = false }) { Text("Cerrar") }
             }
-        }
+        )
     }
 }
 
 @Composable
 fun AdminDashboard() {
+    val haptic = LocalHapticFeedback.current
+    var showAddVehicleDialog by remember { mutableStateOf(false) }
+
+    val flotaVehicular = remember {
+        mutableStateListOf(
+            VehicleInfo("HK-8932", "Toyota Hilux 4x4", "11,5 km/L", "45.200 km", "carlos.perez@teqmed.cl"),
+            VehicleInfo("JP-4021", "Nissan Navara", "12,0 km/L", "28.150 km", "andres.soto@teqmed.cl"),
+            VehicleInfo("CB-1290", "Chevrolet Colorado", "10,8 km/L", "61.900 km", "mauricio.gomez@teqmed.cl")
+        )
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -406,18 +522,45 @@ fun AdminDashboard() {
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        Text(
-            text = "Flota Vehicular Registrada",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold
-        )
-        Spacer(modifier = Modifier.height(8.dp))
+        // Cabecera Flota con Margen y Espaciado Corregido (Ya no está pegado)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Flota Vehicular Registrada",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = "Gestión y asignación de móviles",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
 
-        listOf(
-            Triple("HK-8932", "Toyota Hilux 4x4", "11,5 km/L"),
-            Triple("JP-4021", "Nissan Navara", "12,0 km/L"),
-            Triple("CB-1290", "Chevrolet Colorado", "10,8 km/L")
-        ).forEach { (patente, modelo, consumo) ->
+            Spacer(modifier = Modifier.width(12.dp))
+
+            Button(
+                onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    showAddVehicleDialog = true
+                },
+                shape = RoundedCornerShape(10.dp),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+            ) {
+                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Nuevo Vehículo", style = MaterialTheme.typography.labelMedium)
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        flotaVehicular.forEach { vehiculo ->
             ElevatedCard(
                 shape = RoundedCornerShape(14.dp),
                 colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -425,25 +568,46 @@ fun AdminDashboard() {
                     .fillMaxWidth()
                     .padding(vertical = 4.dp)
             ) {
-                Row(
-                    modifier = Modifier.padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.DirectionsCar, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                        Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.DirectionsCar, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(vehiculo.patente, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                                Text(vehiculo.modelo, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                        StatusChip(vehiculo.rendimiento, Icons.Outlined.LocalGasStation, InfoBlue)
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Column {
-                            Text(patente, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-                            Text(modelo, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("Odómetro Actual:", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(vehiculo.kilometrajeActual, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodySmall)
+                        }
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text("Técnico Asignado:", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(vehiculo.tecnicoEmail, fontWeight = FontWeight.Medium, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
                         }
                     }
-                    StatusChip(consumo, Icons.Outlined.LocalGasStation, InfoBlue)
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(20.dp))
+        Spacer(modifier = Modifier.height(24.dp))
 
         Text(
             text = "Destinos Médicos Frecuentes",
@@ -453,9 +617,9 @@ fun AdminDashboard() {
         Spacer(modifier = Modifier.height(8.dp))
 
         listOf(
-            "Clínica RedSalud Rancagua" to "Distancia: 87 km",
-            "Hospital Clínico Chillán" to "Distancia: 400 km",
-            "Centro Médico Viña del Mar" to "Distancia: 120 km"
+            "Clínica RedSalud Rancagua" to "87 km",
+            "Hospital Clínico Chillán" to "400 km",
+            "Centro Médico Viña del Mar" to "120 km"
         ).forEach { (clinica, dist) ->
             ElevatedCard(
                 shape = RoundedCornerShape(14.dp),
@@ -465,18 +629,120 @@ fun AdminDashboard() {
                     .padding(vertical = 4.dp)
             ) {
                 Row(
-                    modifier = Modifier.padding(16.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
+                    ) {
                         Icon(Icons.Default.LocalHospital, contentDescription = null, tint = ErrorRed)
                         Spacer(modifier = Modifier.width(12.dp))
-                        Text(clinica, fontWeight = FontWeight.Medium, style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            text = clinica,
+                            fontWeight = FontWeight.Medium,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
                     }
-                    Text(dist, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Surface(
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text(
+                            text = dist,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    }
                 }
             }
         }
     }
+
+    if (showAddVehicleDialog) {
+        var nuevaPatente by remember { mutableStateOf("") }
+        var nuevoModelo by remember { mutableStateOf("") }
+        var nuevoRendimiento by remember { mutableStateOf("") }
+        var nuevoKm by remember { mutableStateOf("") }
+        var nuevoTecnico by remember { mutableStateOf("") }
+
+        AlertDialog(
+            onDismissRequest = { showAddVehicleDialog = false },
+            title = { Text("Registrar Nuevo Vehículo", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = nuevaPatente,
+                        onValueChange = { nuevaPatente = it },
+                        label = { Text("Patente (ej. AB-1234)") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = nuevoModelo,
+                        onValueChange = { nuevoModelo = it },
+                        label = { Text("Modelo / Marca") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = nuevoRendimiento,
+                        onValueChange = { nuevoRendimiento = it },
+                        label = { Text("Rendimiento (ej. 11,0 km/L)") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = nuevoKm,
+                        onValueChange = { nuevoKm = it },
+                        label = { Text("Kilometraje Actual (ej. 15.000 km)") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = nuevoTecnico,
+                        onValueChange = { nuevoTecnico = it },
+                        label = { Text("Correo Técnico Asignado") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (nuevaPatente.isNotBlank() && nuevoModelo.isNotBlank()) {
+                            flotaVehicular.add(
+                                VehicleInfo(
+                                    patente = nuevaPatente.uppercase(),
+                                    modelo = nuevoModelo,
+                                    rendimiento = if (nuevoRendimiento.isNotBlank()) nuevoRendimiento else "11.0 km/L",
+                                    kilometrajeActual = if (nuevoKm.isNotBlank()) nuevoKm else "0 km",
+                                    tecnicoEmail = if (nuevoTecnico.isNotBlank()) nuevoTecnico else "sin.asignar@teqmed.cl"
+                                )
+                            )
+                            showAddVehicleDialog = false
+                        }
+                    },
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Text("Guardar Vehículo")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAddVehicleDialog = false }) {
+                    Text("Cancelar")
+                }
+            }
+        )
+    }
 }
+
+data class VehicleInfo(
+    val patente: String,
+    val modelo: String,
+    val rendimiento: String,
+    val kilometrajeActual: String,
+    val tecnicoEmail: String
+)
