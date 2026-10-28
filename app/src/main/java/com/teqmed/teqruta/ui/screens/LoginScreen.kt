@@ -113,7 +113,7 @@ fun LoginScreen(navController: NavController) {
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "Ingrese sus credenciales institucionales",
+                    text = "Ingrese sus credenciales",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -129,7 +129,7 @@ fun LoginScreen(navController: NavController) {
                             emailError = ValidationUtils.validateEmail(it).errorMessage
                         }
                     },
-                    label = "Correo Electrónico (ej. usuario@teqruta.cl)",
+                    label = "Correo electronico",
                     leadingIcon = Icons.Outlined.Email,
                     errorMessage = emailError,
                     isTouched = isTouched,

@@ -18,8 +18,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.teqmed.teqruta.model.Viaje
@@ -35,18 +33,15 @@ import com.teqmed.teqruta.viewmodel.ViajeViewModel
 fun HistoryScreen(viewModel: ViajeViewModel) {
     val viajes by viewModel.viajesDb.collectAsState()
     var searchQuery by remember { mutableStateOf("") }
-    val haptic = LocalHapticFeedback.current
 
     val filteredViajes = remember(viajes, searchQuery) {
         if (searchQuery.isBlank()) viajes
         else viajes.filter {
             it.rutaSeleccionada.contains(searchQuery, ignoreCase = true) ||
-            it.uuid.contains(searchQuery, ignoreCase = true) ||
-            it.vehiculoPatente.contains(searchQuery, ignoreCase = true)
+                    it.uuid.contains(searchQuery, ignoreCase = true) ||
+                    it.vehiculoPatente.contains(searchQuery, ignoreCase = true)
         }
     }
-
-    val pendientesCount = viajes.count { !it.sincronizado }
 
     Column(
         modifier = Modifier
@@ -55,7 +50,7 @@ fun HistoryScreen(viewModel: ViajeViewModel) {
             .clearFocusOnTap()
             .padding(16.dp)
     ) {
-        // Header Row
+        // Header Row (Sincronización automática de fondo cada 2 minutos sin botón manual)
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -69,26 +64,10 @@ fun HistoryScreen(viewModel: ViajeViewModel) {
                     color = MaterialTheme.colorScheme.onBackground
                 )
                 Text(
-                    text = "${viajes.size} viaje(s) almacenados localmente",
+                    text = "${viajes.size} viaje(s) registrados",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-            }
-
-            if (pendientesCount > 0) {
-                Button(
-                    onClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        viewModel.sincronizarPendientes()
-                    },
-                    shape = RoundedCornerShape(20.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
-                ) {
-                    Icon(Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("Sincronizar ($pendientesCount)", style = MaterialTheme.typography.labelMedium)
-                }
             }
         }
 
@@ -162,7 +141,6 @@ fun ViajeItemCard(viaje: Viaje) {
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            // Header Row: Destination & Sync Status Badge
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -185,7 +163,6 @@ fun ViajeItemCard(viaje: Viaje) {
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Human-Readable Date & Time
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
                     Icons.Outlined.CalendarToday,
@@ -203,7 +180,6 @@ fun ViajeItemCard(viaje: Viaje) {
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Metrics Summary Row (Distance & Total Tolls formatted)
             Surface(
                 color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
                 shape = RoundedCornerShape(10.dp),
@@ -214,7 +190,7 @@ fun ViajeItemCard(viaje: Viaje) {
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Distance
+                    // Distancia
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Outlined.Speed, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(6.dp))
@@ -228,7 +204,7 @@ fun ViajeItemCard(viaje: Viaje) {
                         }
                     }
 
-                    // Peajes
+                    // Peajes (Sin signo de peso duplicado o redundante)
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.AttachMoney, contentDescription = null, tint = SuccessGreen, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(4.dp))
@@ -245,7 +221,7 @@ fun ViajeItemCard(viaje: Viaje) {
                 }
             }
 
-            // Expandable Detailed Technical View
+            // Expandible detallado con Ubicación Inicial y Final GPS
             AnimatedVisibility(
                 visible = expanded,
                 enter = fadeIn() + expandVertically(),
@@ -279,21 +255,36 @@ fun ViajeItemCard(viaje: Viaje) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
 
-                    if (viaje.latitudInicio != null && viaje.longitudInicio != null) {
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Outlined.LocationOn, contentDescription = null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(14.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = FormatUtils.formatGps(viaje.latitudInicio, viaje.longitudInicio),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // GPS de Inicio
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Outlined.LocationOn, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(14.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "Ubicación inicial GPS: ${if (viaje.latitudInicio != null && viaje.longitudInicio != null) FormatUtils.formatGps(viaje.latitudInicio, viaje.longitudInicio) else "No disponible"}",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    // GPS de Finalización
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Outlined.LocationOn, contentDescription = null, tint = ErrorRed, modifier = Modifier.size(14.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "Ubicación final GPS: ${if (viaje.latitudFin != null && viaje.longitudFin != null) FormatUtils.formatGps(viaje.latitudFin, viaje.longitudFin) else "Pendiente / No registrada"}",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
                     }
 
                     if (viaje.eventosExtra.isNotBlank()) {
-                        Spacer(modifier = Modifier.height(4.dp))
+                        Spacer(modifier = Modifier.height(6.dp))
                         Text(
                             text = "Observaciones: ${viaje.eventosExtra.replace(";", ", ")}",
                             style = MaterialTheme.typography.labelSmall,
