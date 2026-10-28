@@ -1,227 +1,171 @@
 package com.teqmed.teqruta.ui.screens
 
+import android.graphics.Bitmap
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.*
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.DirectionsCar
+import androidx.compose.material.icons.outlined.LocationOn
+import androidx.compose.material.icons.outlined.Speed
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.teqmed.teqruta.ui.components.CapturedImagePreview
+import com.teqmed.teqruta.ui.components.PulsatingStatusBadge
+import com.teqmed.teqruta.ui.components.ValidableOutlinedTextField
+import com.teqmed.teqruta.ui.components.clearFocusOnTap
+import com.teqmed.teqruta.ui.theme.ErrorRed
+import com.teqmed.teqruta.ui.theme.SuccessGreen
+import com.teqmed.teqruta.utils.FormatUtils
 import com.teqmed.teqruta.viewmodel.TripState
 import com.teqmed.teqruta.viewmodel.ViajeViewModel
-import java.util.UUID
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.rememberScrollState
 
 @Composable
 fun ActiveTripScreen(viewModel: ViajeViewModel) {
     val tripState by viewModel.tripState.collectAsState()
-    val rutaSeleccionada by viewModel.rutaSeleccionada.collectAsState()
 
-    when (tripState) {
-        TripState.SETUP -> InitialTripScreen(viewModel, rutaSeleccionada)
-        TripState.IN_PROGRESS -> InProgressScreen(viewModel, rutaSeleccionada)
-        TripState.FINISHED -> FinishedScreen(viewModel)
+    AnimatedContent(
+        targetState = tripState,
+        transitionSpec = {
+            fadeIn() + slideInHorizontally() togetherWith fadeOut() + slideOutHorizontally()
+        },
+        label = "trip_state_transition"
+    ) { state ->
+        when (state) {
+            TripState.SETUP -> InitialTripScreen(viewModel)
+            TripState.IN_PROGRESS -> InProgressScreen(viewModel)
+            TripState.FINISHED -> FinishedScreen(viewModel)
+        }
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun InitialTripScreen(viewModel: ViajeViewModel, rutaActual: String) {
+fun InitialTripScreen(viewModel: ViajeViewModel) {
+    val context = LocalContext.current
+    val haptic = LocalHapticFeedback.current
+
+    val rutaActual by viewModel.rutaSeleccionada.collectAsState()
     val odoInicio by viewModel.odometroInicio.collectAsState()
-    val fotoInicio by viewModel.fotoInicio.collectAsState()
-    
-    val rutas = listOf("Santiago - Rancagua", "Chillán - Los Ángeles", "Valparaíso - Viña del Mar")
+    val odoInicioError by viewModel.odometroInicioError.collectAsState()
+    val fotoInicioBitmap by viewModel.fotoInicioBitmap.collectAsState()
+
+    val rutas = listOf(
+        "Santiago - Rancagua (Clínica RedSalud)",
+        "Chillán - Los Ángeles (Hospital Clínico)",
+        "Valparaíso - Viña del Mar (Centro Médico)",
+        "Concepción - Talcahuano (Clínica Biobío)"
+    )
     var expanded by remember { mutableStateOf(false) }
+    var isTouched by remember { mutableStateOf(false) }
 
-    Column(modifier = Modifier.padding(16.dp).fillMaxSize()) {
-        Text("Iniciar Nuevo Viaje", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
-        Spacer(modifier = Modifier.height(16.dp))
-        
-        ExposedDropdownMenuBox(
-            expanded = expanded,
-            onExpandedChange = { expanded = it }
-        ) {
-            OutlinedTextField(
-                value = rutaActual,
-                onValueChange = {},
-                readOnly = true,
-                label = { Text("Seleccionar Destino") },
-                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-                colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
-                modifier = Modifier.menuAnchor().fillMaxWidth()
-            )
-            ExposedDropdownMenu(
-                expanded = expanded,
-                onDismissRequest = { expanded = false }
-            ) {
-                rutas.forEach { ruta ->
-                    DropdownMenuItem(
-                        text = { Text(ruta) },
-                        onClick = {
-                            viewModel.onRutaChange(ruta)
-                            expanded = false
-                        }
-                    )
-                }
-            }
-        }
-        
-        Spacer(modifier = Modifier.height(16.dp))
-        
-        Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text("Odometría Inicial", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
-                Spacer(modifier = Modifier.height(12.dp))
-                
-                OutlinedTextField(
-                    value = odoInicio,
-                    onValueChange = viewModel::onOdometroInicioChange,
-                    label = { Text("Valor Odómetro (Km)") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.fillMaxWidth()
-                )
-                
-                Spacer(modifier = Modifier.height(12.dp))
-                
-                Button(
-                    onClick = { viewModel.onFotoInicioTomada("foto_inicio_${UUID.randomUUID()}.jpg") },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(containerColor = if (fotoInicio != null) com.teqmed.teqruta.ui.theme.SuccessGreen else MaterialTheme.colorScheme.secondary)
-                ) {
-                    Icon(if (fotoInicio != null) Icons.Filled.Check else Icons.Filled.CameraAlt, contentDescription = "Cámara")
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(if (fotoInicio != null) "Foto Capturada" else "Tomar Foto Odómetro")
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.weight(1f))
-
-        Button(
-            onClick = { viewModel.iniciarViaje() },
-            modifier = Modifier.fillMaxWidth().height(56.dp),
-            enabled = odoInicio.isNotEmpty() && fotoInicio != null,
-            shape = RoundedCornerShape(12.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-        ) {
-            Icon(Icons.Filled.PlayArrow, contentDescription = "Iniciar")
-            Spacer(modifier = Modifier.width(8.dp))
-            Text("Iniciar Viaje", style = MaterialTheme.typography.titleMedium)
+    // Native Camera Launcher
+    val cameraLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicturePreview()
+    ) { bitmap: Bitmap? ->
+        if (bitmap != null) {
+            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            viewModel.onFotoInicioTomada(bitmap)
         }
     }
-}
 
-@Composable
-fun InProgressScreen(viewModel: ViajeViewModel, ruta: String) {
-    val odoFin by viewModel.odometroFin.collectAsState()
-    val fotoFin by viewModel.fotoFin.collectAsState()
-    val peajes by viewModel.peajes.collectAsState()
-    
-    var montoPeajeInput by remember { mutableStateOf("") }
-    var eventoInput by remember { mutableStateOf("") }
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .clearFocusOnTap()
+            .padding(16.dp)
+            .verticalScroll(rememberScrollState())
+    ) {
+        // Section Header
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(vertical = 8.dp)
+        ) {
+            Icon(
+                Icons.Outlined.DirectionsCar,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(28.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Column {
+                Text(
+                    text = "Iniciar Nuevo Viaje",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onBackground
+                )
+                Text(
+                    text = "Verificación inicial del vehículo e inicio de ruta",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
 
-    Column(modifier = Modifier.padding(16.dp).fillMaxSize().verticalScroll(rememberScrollState())) {
-        Card(
-            modifier = Modifier.fillMaxWidth(), 
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f))
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Route Selector Dropdown
+        ElevatedCard(
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface),
+            elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp),
+            modifier = Modifier.fillMaxWidth()
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Filled.DirectionsCar, contentDescription = "Carro", tint = MaterialTheme.colorScheme.primary)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Viaje en Curso", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-                }
-                Spacer(modifier = Modifier.height(4.dp))
-                Text("Ruta actual: \$ruta", color = MaterialTheme.colorScheme.onSurface)
-            }
-        }
-        
-        Spacer(modifier = Modifier.height(16.dp))
-        
-        Text("Registro de Peajes", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onBackground)
-        
-        Card(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = "1. Destino Asignado",
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+
+                ExposedDropdownMenuBox(
+                    expanded = expanded,
+                    onExpandedChange = { expanded = it }
+                ) {
                     OutlinedTextField(
-                        value = montoPeajeInput,
-                        onValueChange = { montoPeajeInput = it },
-                        label = { Text("Monto ($)") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        modifier = Modifier.weight(1f)
+                        value = rutaActual,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Ruta Médica") },
+                        leadingIcon = { Icon(Icons.Outlined.LocationOn, contentDescription = null) },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
+                            .fillMaxWidth()
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    FilledIconButton(
-                        onClick = { 
-                            val monto = montoPeajeInput.toDoubleOrNull()
-                            if (monto != null) {
-                                viewModel.agregarPeaje(monto, "foto_peaje_\${UUID.randomUUID()}.jpg")
-                                montoPeajeInput = ""
-                            }
-                        },
-                        colors = IconButtonDefaults.filledIconButtonColors(containerColor = MaterialTheme.colorScheme.primary),
-                        modifier = Modifier.size(56.dp)
+                    ExposedDropdownMenu(
+                        expanded = expanded,
+                        onDismissRequest = { expanded = false }
                     ) {
-                        Icon(Icons.Filled.CameraAlt, contentDescription = "Capturar", tint = Color.White)
-                    }
-                }
-                if (peajes.isNotEmpty()) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    peajes.forEach { peaje ->
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 4.dp)) {
-                            Icon(Icons.Filled.Receipt, contentDescription = "Peaje", tint = com.teqmed.teqruta.ui.theme.SuccessGreen, modifier = Modifier.size(20.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Peaje registrado: $\${peaje.monto}", color = MaterialTheme.colorScheme.onBackground)
-                        }
-                    }
-                }
-            }
-        }
-        
-        Spacer(modifier = Modifier.height(16.dp))
-        Text("Registro de Eventos (Stops, Bencina, etc)", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onBackground)
-        Card(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedTextField(
-                        value = eventoInput,
-                        onValueChange = { eventoInput = it },
-                        label = { Text("Describir evento") },
-                        modifier = Modifier.weight(1f)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    FilledIconButton(
-                        onClick = { 
-                            if (eventoInput.isNotBlank()) {
-                                viewModel.agregarEvento(eventoInput)
-                                eventoInput = ""
-                            }
-                        },
-                        colors = IconButtonDefaults.filledIconButtonColors(containerColor = MaterialTheme.colorScheme.primary),
-                        modifier = Modifier.size(56.dp)
-                    ) {
-                        Icon(Icons.Filled.Add, contentDescription = "Añadir", tint = Color.White)
-                    }
-                }
-                val eventos by viewModel.eventos.collectAsState()
-                if (eventos.isNotEmpty()) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    eventos.forEach { evt ->
-                        val parts = evt.split("|", limit = 2)
-                        val text = if(parts.size == 2) parts[1] else evt
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 4.dp)) {
-                            Icon(Icons.Filled.Info, contentDescription = "Evento", tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(20.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(text, color = MaterialTheme.colorScheme.onBackground)
+                        rutas.forEach { ruta ->
+                            DropdownMenuItem(
+                                text = { Text(ruta) },
+                                onClick = {
+                                    viewModel.onRutaChange(ruta)
+                                    expanded = false
+                                }
+                            )
                         }
                     }
                 }
@@ -229,74 +173,447 @@ fun InProgressScreen(viewModel: ViajeViewModel, ruta: String) {
         }
 
         Spacer(modifier = Modifier.height(16.dp))
-        
-        Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+
+        // Initial Odometer Card
+        ElevatedCard(
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface),
+            elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
             Column(modifier = Modifier.padding(16.dp)) {
-                Text("Finalizar Viaje", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
-                Spacer(modifier = Modifier.height(12.dp))
-                
-                OutlinedTextField(
-                    value = odoFin,
-                    onValueChange = viewModel::onOdometroFinChange,
-                    label = { Text("Odómetro Final (Km)") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.fillMaxWidth()
+                Text(
+                    text = "2. Odometría & Evidencia Fotográfica",
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
-                
                 Spacer(modifier = Modifier.height(12.dp))
-                
-                Button(
-                    onClick = { viewModel.onFotoFinTomada("foto_fin_\${UUID.randomUUID()}.jpg") },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(containerColor = if (fotoFin != null) com.teqmed.teqruta.ui.theme.SuccessGreen else MaterialTheme.colorScheme.secondary)
-                ) {
-                    Icon(if (fotoFin != null) Icons.Filled.Check else Icons.Filled.CameraAlt, contentDescription = "Cámara")
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(if (fotoFin != null) "Foto Capturada" else "Tomar Foto Odómetro")
-                }
+
+                ValidableOutlinedTextField(
+                    value = odoInicio,
+                    onValueChange = {
+                        isTouched = true
+                        viewModel.onOdometroInicioChange(it)
+                    },
+                    label = "Odómetro Inicial (Km)",
+                    leadingIcon = Icons.Outlined.Speed,
+                    errorMessage = odoInicioError,
+                    isTouched = isTouched,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Native Camera Launcher UI Component
+                CapturedImagePreview(
+                    bitmap = fotoInicioBitmap,
+                    onTakeClick = { cameraLauncher.launch(null) },
+                    label = if (fotoInicioBitmap != null) "Foto Odómetro Capturada" else "Tomar Foto Odómetro (Cámara Nativa)"
+                )
             }
         }
 
         Spacer(modifier = Modifier.height(24.dp))
 
+        // Start Trip Button
+        val canStart = odoInicio.isNotEmpty() && odoInicioError == null && fotoInicioBitmap != null
+
         Button(
-            onClick = { viewModel.terminarViaje() },
-            modifier = Modifier.fillMaxWidth().height(56.dp),
-            enabled = odoFin.isNotEmpty() && fotoFin != null,
-            colors = ButtonDefaults.buttonColors(containerColor = com.teqmed.teqruta.ui.theme.ErrorRed)
+            onClick = {
+                isTouched = true
+                if (canStart) {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    viewModel.iniciarViaje(context)
+                }
+            },
+            enabled = canStart,
+            shape = RoundedCornerShape(12.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp)
         ) {
-            Icon(Icons.Filled.Stop, contentDescription = "Terminar", tint = Color.White)
+            Icon(Icons.Filled.PlayArrow, contentDescription = null)
             Spacer(modifier = Modifier.width(8.dp))
-            Text("Terminar Viaje", style = MaterialTheme.typography.titleMedium, color = Color.White)
+            Text("Iniciar Viaje (Capturar GPS)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         }
-        
-        Spacer(modifier = Modifier.height(16.dp)) // Extra padding at bottom
+
+        Spacer(modifier = Modifier.height(16.dp))
+    }
+}
+
+@Composable
+fun InProgressScreen(viewModel: ViajeViewModel) {
+    val context = LocalContext.current
+    val haptic = LocalHapticFeedback.current
+
+    val ruta by viewModel.rutaSeleccionada.collectAsState()
+    val odoInicio by viewModel.odometroInicio.collectAsState()
+    val locationInicio by viewModel.locationInicio.collectAsState()
+
+    val peajes by viewModel.peajes.collectAsState()
+    val montoPeajeInput by viewModel.montoPeajeInput.collectAsState()
+    val montoPeajeError by viewModel.montoPeajeError.collectAsState()
+    val fotoPeajeActual by viewModel.fotoPeajeActual.collectAsState()
+
+    val eventos by viewModel.eventos.collectAsState()
+    val eventoInput by viewModel.eventoInput.collectAsState()
+
+    val odoFin by viewModel.odometroFin.collectAsState()
+    val odoFinError by viewModel.odometroFinError.collectAsState()
+    val fotoFinBitmap by viewModel.fotoFinBitmap.collectAsState()
+
+    var isPeajeTouched by remember { mutableStateOf(false) }
+    var isFinTouched by remember { mutableStateOf(false) }
+
+    // Camera Launchers for Toll receipt and Final Odometer
+    val peajeCameraLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicturePreview()
+    ) { bitmap: Bitmap? ->
+        if (bitmap != null) {
+            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            viewModel.onFotoPeajeTomada(bitmap)
+        }
+    }
+
+    val finCameraLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicturePreview()
+    ) { bitmap: Bitmap? ->
+        if (bitmap != null) {
+            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            viewModel.onFotoFinTomada(bitmap)
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .clearFocusOnTap()
+            .padding(16.dp)
+            .verticalScroll(rememberScrollState())
+    ) {
+        // Active Status Pulsating Header
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Viaje en Progreso",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.ExtraBold,
+                color = MaterialTheme.colorScheme.onBackground
+            )
+            PulsatingStatusBadge(
+                text = "EN CURSO",
+                badgeColor = SuccessGreen
+            )
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // Trip Info Summary Card
+        ElevatedCard(
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.DirectionsCar, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(ruta, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+                val odoInt = odoInicio.toIntOrNull() ?: 0
+                Text("Odómetro Inicio: ${FormatUtils.formatNumber(odoInt)} km", style = MaterialTheme.typography.bodyMedium)
+                if (locationInicio != null) {
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        FormatUtils.formatGps(locationInicio?.latitude, locationInicio?.longitude),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Peajes Section
+        ElevatedCard(
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface),
+            elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "Registro de Peajes / Boletas",
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+
+                ValidableOutlinedTextField(
+                    value = montoPeajeInput,
+                    onValueChange = {
+                        isPeajeTouched = true
+                        viewModel.onMontoPeajeChange(it)
+                    },
+                    label = "Monto Peaje ($ CLP)",
+                    leadingIcon = Icons.Filled.AttachMoney,
+                    errorMessage = montoPeajeError,
+                    isTouched = isPeajeTouched,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                CapturedImagePreview(
+                    bitmap = fotoPeajeActual,
+                    onTakeClick = { peajeCameraLauncher.launch(null) },
+                    label = if (fotoPeajeActual != null) "Comprobante Capturado" else "Tomar Foto Boleta (Cámara)"
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Button(
+                    onClick = {
+                        isPeajeTouched = true
+                        viewModel.agregarPeaje()
+                        isPeajeTouched = false
+                    },
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Agregar Peaje a la Lista")
+                }
+
+                // Peajes items list with smooth animation
+                if (peajes.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = "Peajes Registrados (${peajes.size}):",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    peajes.forEach { peaje ->
+                        AnimatedVisibility(
+                            visible = true,
+                            enter = fadeIn() + expandVertically()
+                        ) {
+                            Surface(
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(Icons.Default.Receipt, contentDescription = null, tint = SuccessGreen)
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Column {
+                                            Text(FormatUtils.formatCurrency(peaje.monto), fontWeight = FontWeight.Bold)
+                                            Text("Evidencia: ${if (peaje.bitmap != null) "Foto adjunta" else "Sin foto"}", style = MaterialTheme.typography.labelSmall)
+                                        }
+                                    }
+                                    IconButton(onClick = { viewModel.eliminarPeaje(peaje.id) }) {
+                                        Icon(Icons.Default.Delete, contentDescription = "Eliminar", tint = ErrorRed)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Events Section
+        ElevatedCard(
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface),
+            elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "Registro de Eventos / Bitácora",
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedTextField(
+                        value = eventoInput,
+                        onValueChange = viewModel::onEventoInputChange,
+                        label = { Text("Detalle evento (ej. Detención, Tráfico)") },
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.weight(1f)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    IconButton(
+                        onClick = { viewModel.agregarEvento() },
+                        colors = IconButtonDefaults.iconButtonColors(containerColor = MaterialTheme.colorScheme.primary),
+                        modifier = Modifier.size(52.dp)
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = "Añadir", tint = Color.White)
+                    }
+                }
+
+                if (eventos.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    eventos.forEach { evt ->
+                        val text = evt.substringAfter("|", evt)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(vertical = 4.dp)
+                        ) {
+                            Icon(Icons.Default.Info, contentDescription = null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(text, style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Finalize Trip Section
+        ElevatedCard(
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface),
+            elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "Finalización del Viaje",
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+
+                ValidableOutlinedTextField(
+                    value = odoFin,
+                    onValueChange = {
+                        isFinTouched = true
+                        viewModel.onOdometroFinChange(it)
+                    },
+                    label = "Odómetro Final (Km)",
+                    leadingIcon = Icons.Outlined.Speed,
+                    errorMessage = odoFinError,
+                    isTouched = isFinTouched,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                CapturedImagePreview(
+                    bitmap = fotoFinBitmap,
+                    onTakeClick = { finCameraLauncher.launch(null) },
+                    label = if (fotoFinBitmap != null) "Foto Final Capturada" else "Foto Odómetro Final (Cámara)"
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // Finish Trip Action Button
+        val canFinish = odoFin.isNotEmpty() && odoFinError == null && fotoFinBitmap != null
+
+        Button(
+            onClick = {
+                isFinTouched = true
+                if (canFinish) {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    viewModel.terminarViaje(context)
+                }
+            },
+            enabled = canFinish,
+            shape = RoundedCornerShape(12.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = ErrorRed),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp)
+        ) {
+            Icon(Icons.Filled.Stop, contentDescription = null, tint = Color.White)
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("Terminar Viaje & Guardar (Room DB)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color.White)
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
     }
 }
 
 @Composable
 fun FinishedScreen(viewModel: ViajeViewModel) {
+    val haptic = LocalHapticFeedback.current
+
     Column(
-        modifier = Modifier.fillMaxSize().padding(32.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .padding(24.dp),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Icon(Icons.Filled.CheckCircle, contentDescription = "Listo", tint = com.teqmed.teqruta.ui.theme.SuccessGreen, modifier = Modifier.size(120.dp))
+        Icon(
+            Icons.Default.CheckCircle,
+            contentDescription = "Éxito",
+            tint = SuccessGreen,
+            modifier = Modifier.size(110.dp)
+        )
+
         Spacer(modifier = Modifier.height(24.dp))
-        Text("¡Viaje finalizado con éxito!", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
-        Spacer(modifier = Modifier.height(8.dp))
-        Text("El viaje ha sido guardado localmente y quedará en espera de sincronización automática al detectar red.", 
-             color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
-             textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-        
-        Spacer(modifier = Modifier.height(48.dp))
-        
+
+        Text(
+            text = "¡Viaje Finalizado & Guardado!",
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.ExtraBold,
+            color = MaterialTheme.colorScheme.onBackground
+        )
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        Text(
+            text = "El registro ha sido almacenado localmente en Room DB y se encuentra listo para sincronización con la central.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+        )
+
+        Spacer(modifier = Modifier.height(40.dp))
+
         Button(
-            onClick = { viewModel.reset() },
-            modifier = Modifier.fillMaxWidth().height(56.dp),
-            shape = RoundedCornerShape(12.dp)
+            onClick = {
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                viewModel.reset()
+            },
+            shape = RoundedCornerShape(12.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(52.dp)
         ) {
-            Text("Iniciar Nuevo Viaje")
+            Icon(Icons.Default.Add, contentDescription = null)
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("Iniciar Otro Viaje", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         }
     }
 }

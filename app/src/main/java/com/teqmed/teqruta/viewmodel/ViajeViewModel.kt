@@ -1,129 +1,324 @@
 package com.teqmed.teqruta.viewmodel
 
-import androidx.lifecycle.ViewModel
+import android.app.Application
+import android.graphics.Bitmap
+import android.content.Context
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.teqmed.teqruta.data.AppDatabase
 import com.teqmed.teqruta.model.Viaje
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
+import com.teqmed.teqruta.utils.LocationHelper
+import com.teqmed.teqruta.utils.ValidationUtils
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import java.util.UUID
 
 enum class TripState {
     SETUP, IN_PROGRESS, FINISHED
 }
 
-data class PeajeInfo(val monto: Double, val fotoUri: String)
+data class PeajeInfo(
+    val id: String = UUID.randomUUID().toString(),
+    val monto: Double,
+    val bitmap: Bitmap? = null
+)
 
-class ViajeViewModel : ViewModel() {
+class ViajeViewModel(application: Application) : AndroidViewModel(application) {
 
+    private val db = AppDatabase.getDatabase(application)
+    private val viajeDao = db.viajeDao()
+
+    // Status of trip
     private val _tripState = MutableStateFlow(TripState.SETUP)
     val tripState: StateFlow<TripState> = _tripState
 
-    private val _rutaSeleccionada = MutableStateFlow("Santiago - Rancagua")
+    private val _rutaSeleccionada = MutableStateFlow("Santiago - Rancagua (Clínica RedSalud)")
     val rutaSeleccionada: StateFlow<String> = _rutaSeleccionada
 
-    // Inicio
+    // Vehicle
+    private val _vehiculoPatente = MutableStateFlow("HK-8932 (Toyota Hilux)")
+    val vehiculoPatente: StateFlow<String> = _vehiculoPatente
+
+    // Form: Inicio
     private val _odometroInicio = MutableStateFlow("")
     val odometroInicio: StateFlow<String> = _odometroInicio
     
-    private val _fotoInicio = MutableStateFlow<String?>(null)
-    val fotoInicio: StateFlow<String?> = _fotoInicio
+    private val _odometroInicioError = MutableStateFlow<String?>(null)
+    val odometroInicioError: StateFlow<String?> = _odometroInicioError
+    
+    private val _fotoInicioBitmap = MutableStateFlow<Bitmap?>(null)
+    val fotoInicioBitmap: StateFlow<Bitmap?> = _fotoInicioBitmap
 
-    // Peajes
+    private val _locationInicio = MutableStateFlow<LocationHelper.LocationCoordinates?>(null)
+    val locationInicio: StateFlow<LocationHelper.LocationCoordinates?> = _locationInicio
+
+    // Form: Peajes & Eventos
     private val _peajes = MutableStateFlow<List<PeajeInfo>>(emptyList())
     val peajes: StateFlow<List<PeajeInfo>> = _peajes
     
-    // Fin
-    private val _odometroFin = MutableStateFlow("")
-    val odometroFin: StateFlow<String> = _odometroFin
+    private val _montoPeajeInput = MutableStateFlow("")
+    val montoPeajeInput: StateFlow<String> = _montoPeajeInput
     
-    private val _fotoFin = MutableStateFlow<String?>(null)
-    val fotoFin: StateFlow<String?> = _fotoFin
+    private val _montoPeajeError = MutableStateFlow<String?>(null)
+    val montoPeajeError: StateFlow<String?> = _montoPeajeError
 
-    // Logging
+    private val _fotoPeajeActual = MutableStateFlow<Bitmap?>(null)
+    val fotoPeajeActual: StateFlow<Bitmap?> = _fotoPeajeActual
+
     private val _eventos = MutableStateFlow<List<String>>(emptyList())
     val eventos: StateFlow<List<String>> = _eventos
     
+    private val _eventoInput = MutableStateFlow("")
+    val eventoInput: StateFlow<String> = _eventoInput
+
+    // Form: Fin
+    private val _odometroFin = MutableStateFlow("")
+    val odometroFin: StateFlow<String> = _odometroFin
+    
+    private val _odometroFinError = MutableStateFlow<String?>(null)
+    val odometroFinError: StateFlow<String?> = _odometroFinError
+
+    private val _fotoFinBitmap = MutableStateFlow<Bitmap?>(null)
+    val fotoFinBitmap: StateFlow<Bitmap?> = _fotoFinBitmap
+
+    private val _locationFin = MutableStateFlow<LocationHelper.LocationCoordinates?>(null)
+    val locationFin: StateFlow<LocationHelper.LocationCoordinates?> = _locationFin
+
     private var horaInicioViaje: Long = 0L
 
-    // Historial simulado para la vista
-    private val _historial = MutableStateFlow<List<Viaje>>(
-        listOf(
-            Viaje(rutaSeleccionada = "Chillán - Los Ángeles", odometroInicio = 1000, fotoOdometroInicio = "img1", odometroFin = 1200, fotoOdometroFin = "img2", totalMontoPeajes = 5000.0, fotosPeajes = "", sincronizado = true),
-            Viaje(rutaSeleccionada = "Santiago - Rancagua", odometroInicio = 1500, fotoOdometroInicio = "img3", odometroFin = 1590, fotoOdometroFin = "img4", totalMontoPeajes = 2500.0, fotosPeajes = "", sincronizado = false)
+    // Room Database Flow of viajes
+    val viajesDb: StateFlow<List<Viaje>> = viajeDao.getAllViajes()
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
         )
-    )
-    val historial: StateFlow<List<Viaje>> = _historial
 
+    init {
+        // Pre-populate seed data if database is empty
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            viajeDao.getAllViajes().firstOrNull()?.let { list ->
+                if (list.isEmpty()) {
+                    seedInitialData()
+                }
+            }
+        }
+    }
+
+    private suspend fun seedInitialData() {
+        val sample1 = Viaje(
+            rutaSeleccionada = "Chillán - Los Ángeles (Hospital Clínico)",
+            odometroInicio = 10500,
+            fotoOdometroInicio = "sample1_start",
+            odometroFin = 10620,
+            fotoOdometroFin = "sample1_end",
+            totalMontoPeajes = 4500.0,
+            fotosPeajes = "peaje1.jpg",
+            horaInicio = System.currentTimeMillis() - 86400000,
+            horaFin = System.currentTimeMillis() - 80000000,
+            eventosExtra = "Carga combustible 20L",
+            latitudInicio = -36.6067,
+            longitudInicio = -72.1034,
+            latitudFin = -37.4697,
+            longitudFin = -72.3537,
+            tecnicoEmail = "tecnico@teqruta.cl",
+            vehiculoPatente = "HK-8932",
+            sincronizado = true,
+            estadoAprobacion = "APROBADO"
+        )
+        val sample2 = Viaje(
+            rutaSeleccionada = "Santiago - Rancagua (Clínica El Salud)",
+            odometroInicio = 15200,
+            fotoOdometroInicio = "sample2_start",
+            odometroFin = 15290,
+            fotoOdometroFin = "sample2_end",
+            totalMontoPeajes = 2900.0,
+            fotosPeajes = "peaje2.jpg",
+            horaInicio = System.currentTimeMillis() - 43200000,
+            horaFin = System.currentTimeMillis() - 36000000,
+            eventosExtra = "Tráfico pesado en peaje Angostura",
+            latitudInicio = -33.4489,
+            longitudInicio = -70.6693,
+            latitudFin = -34.1708,
+            longitudFin = -70.7444,
+            tecnicoEmail = "tecnico@teqruta.cl",
+            vehiculoPatente = "HK-8932",
+            sincronizado = false,
+            estadoAprobacion = "PENDIENTE"
+        )
+        viajeDao.insertViaje(sample1)
+        viajeDao.insertViaje(sample2)
+    }
+
+    // Input handlers with real-time validation (IE 2.2.1)
     fun onRutaChange(ruta: String) { _rutaSeleccionada.value = ruta }
-    fun onOdometroInicioChange(valor: String) { _odometroInicio.value = valor }
-    fun onFotoInicioTomada(uri: String) { _fotoInicio.value = uri }
-    
-    fun onOdometroFinChange(valor: String) { _odometroFin.value = valor }
-    fun onFotoFinTomada(uri: String) { _fotoFin.value = uri }
-    
-    fun agregarPeaje(monto: Double, uri: String) {
+    fun onVehiculoChange(vehiculo: String) { _vehiculoPatente.value = vehiculo }
+
+    fun onOdometroInicioChange(valor: String) {
+        _odometroInicio.value = valor
+        val res = ValidationUtils.validateOdometroInicio(valor)
+        _odometroInicioError.value = res.errorMessage
+    }
+
+    fun onFotoInicioTomada(bitmap: Bitmap) {
+        _fotoInicioBitmap.value = bitmap
+    }
+
+    fun onOdometroFinChange(valor: String) {
+        _odometroFin.value = valor
+        val startVal = _odometroInicio.value.toIntOrNull()
+        val res = ValidationUtils.validateOdometroFin(valor, startVal)
+        _odometroFinError.value = res.errorMessage
+    }
+
+    fun onFotoFinTomada(bitmap: Bitmap) {
+        _fotoFinBitmap.value = bitmap
+    }
+
+    fun onMontoPeajeChange(valor: String) {
+        _montoPeajeInput.value = valor
+        val res = ValidationUtils.validateMontoPeaje(valor)
+        _montoPeajeError.value = res.errorMessage
+    }
+
+    fun onFotoPeajeTomada(bitmap: Bitmap) {
+        _fotoPeajeActual.value = bitmap
+    }
+
+    fun onEventoInputChange(valor: String) {
+        _eventoInput.value = valor
+    }
+
+    fun agregarPeaje() {
+        val valResult = ValidationUtils.validateMontoPeaje(_montoPeajeInput.value)
+        if (!valResult.isValid) {
+            _montoPeajeError.value = valResult.errorMessage
+            return
+        }
+        val monto = _montoPeajeInput.value.toDoubleOrNull() ?: return
         val list = _peajes.value.toMutableList()
-        list.add(PeajeInfo(monto, uri))
+        list.add(PeajeInfo(monto = monto, bitmap = _fotoPeajeActual.value))
         _peajes.value = list
-    }
-    
-    fun agregarEvento(evento: String) {
-        val list = _eventos.value.toMutableList()
-        list.add("${System.currentTimeMillis()}|$evento")
-        _eventos.value = list
+        
+        // Reset peaje fields
+        _montoPeajeInput.value = ""
+        _montoPeajeError.value = null
+        _fotoPeajeActual.value = null
     }
 
-    fun iniciarViaje() {
-        if (_odometroInicio.value.isNotEmpty() && _fotoInicio.value != null) {
-            horaInicioViaje = System.currentTimeMillis()
-            _tripState.value = TripState.IN_PROGRESS
+    fun eliminarPeaje(peajeId: String) {
+        _peajes.value = _peajes.value.filter { it.id != peajeId }
+    }
+
+    fun agregarEvento() {
+        val valResult = ValidationUtils.validateEvento(_eventoInput.value)
+        if (valResult.isValid) {
+            val list = _eventos.value.toMutableList()
+            list.add("${System.currentTimeMillis()}|${_eventoInput.value.trim()}")
+            _eventos.value = list
+            _eventoInput.value = ""
         }
     }
 
-    fun terminarViaje() {
-        if (_odometroFin.value.isNotEmpty() && _fotoFin.value != null) {
-            _tripState.value = TripState.FINISHED
-            guardarViaje()
+    fun iniciarViaje(context: Context) {
+        val valResult = ValidationUtils.validateOdometroInicio(_odometroInicio.value)
+        if (!valResult.isValid || _fotoInicioBitmap.value == null) {
+            _odometroInicioError.value = valResult.errorMessage ?: "Debe tomar foto del odómetro inicial"
+            return
         }
+        
+        // Native Location GPS Access (IE 2.4.1)
+        val coords = LocationHelper.getCurrentLocation(context)
+        _locationInicio.value = coords
+
+        horaInicioViaje = System.currentTimeMillis()
+        _tripState.value = TripState.IN_PROGRESS
     }
-    
+
+    fun terminarViaje(context: Context) {
+        val startVal = _odometroInicio.value.toIntOrNull()
+        val valResult = ValidationUtils.validateOdometroFin(_odometroFin.value, startVal)
+        if (!valResult.isValid || _fotoFinBitmap.value == null) {
+            _odometroFinError.value = valResult.errorMessage ?: "Debe tomar foto del odómetro final"
+            return
+        }
+
+        // Native Location GPS Access (IE 2.4.1)
+        val coords = LocationHelper.getCurrentLocation(context)
+        _locationFin.value = coords
+
+        _tripState.value = TripState.FINISHED
+        guardarViajeEnRoom()
+    }
+
     fun reset() {
         _tripState.value = TripState.SETUP
         _odometroInicio.value = ""
-        _fotoInicio.value = null
+        _odometroInicioError.value = null
+        _fotoInicioBitmap.value = null
+        _locationInicio.value = null
+        
         _odometroFin.value = ""
-        _fotoFin.value = null
+        _odometroFinError.value = null
+        _fotoFinBitmap.value = null
+        _locationFin.value = null
+
         _peajes.value = emptyList()
+        _montoPeajeInput.value = ""
+        _montoPeajeError.value = null
+        _fotoPeajeActual.value = null
+
         _eventos.value = emptyList()
+        _eventoInput.value = ""
         horaInicioViaje = 0L
     }
 
-    private fun guardarViaje() {
-        viewModelScope.launch {
+    private fun guardarViajeEnRoom() {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             val inicio = _odometroInicio.value.toIntOrNull() ?: 0
             val fin = _odometroFin.value.toIntOrNull() ?: 0
             val totalPeajes = _peajes.value.sumOf { it.monto }
-            val fotosPeajes = _peajes.value.joinToString(",") { it.fotoUri }
-            val eventosJson = _eventos.value.joinToString(";") // Simple representation
+            val eventosStr = _eventos.value.joinToString(";")
             
             val viaje = Viaje(
                 rutaSeleccionada = _rutaSeleccionada.value,
                 odometroInicio = inicio,
-                fotoOdometroInicio = _fotoInicio.value,
+                fotoOdometroInicio = "cap_start_${System.currentTimeMillis()}",
                 odometroFin = fin,
-                fotoOdometroFin = _fotoFin.value,
+                fotoOdometroFin = "cap_end_${System.currentTimeMillis()}",
                 totalMontoPeajes = totalPeajes,
-                fotosPeajes = fotosPeajes,
-                horaInicio = horaInicioViaje,
+                fotosPeajes = "${_peajes.value.size} comprobante(s)",
+                horaInicio = if (horaInicioViaje > 0) horaInicioViaje else System.currentTimeMillis(),
                 horaFin = System.currentTimeMillis(),
-                eventosExtra = eventosJson,
-                sincronizado = false
+                eventosExtra = eventosStr,
+                latitudInicio = _locationInicio.value?.latitude,
+                longitudInicio = _locationInicio.value?.longitude,
+                latitudFin = _locationFin.value?.latitude,
+                longitudFin = _locationFin.value?.longitude,
+                tecnicoEmail = "tecnico@teqruta.cl",
+                vehiculoPatente = _vehiculoPatente.value,
+                sincronizado = false,
+                estadoAprobacion = "PENDIENTE"
             )
-            
-            val currentList = _historial.value.toMutableList()
-            currentList.add(0, viaje)
-            _historial.value = currentList
-            // viajeDao.insertViaje(viaje)
+
+            viajeDao.insertViaje(viaje)
+        }
+    }
+
+    // Actions for Jefe / Admin dashboards
+    fun cambiarEstadoAprobacion(uuid: String, nuevoEstado: String) {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            viajeDao.actualizarEstadoAprobacion(uuid, nuevoEstado)
+        }
+    }
+
+    fun sincronizarPendientes() {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            val pendientes = viajeDao.getViajesPendientes()
+            if (pendientes.isNotEmpty()) {
+                val uuids = pendientes.map { it.uuid }
+                viajeDao.marcarComoSincronizados(uuids)
+            }
         }
     }
 }

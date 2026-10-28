@@ -13,9 +13,18 @@ data class Viaje(
     val odometroFin: Int,
     val fotoOdometroFin: String?,
     val totalMontoPeajes: Double,
-    val fotosPeajes: String, // IDs or URIs separated by comma
-    val horaInicio: Long = 0L,
-    val horaFin: Long = 0L,
+    val fotosPeajes: String, // URIs or representation separated by comma
+    val horaInicio: Long = System.currentTimeMillis(),
+    val horaFin: Long = System.currentTimeMillis(),
     val eventosExtra: String = "",
-    var sincronizado: Boolean = false
+    val latitudInicio: Double? = null,
+    val longitudInicio: Double? = null,
+    val latitudFin: Double? = null,
+    val longitudFin: Double? = null,
+    val tecnicoEmail: String = "hans.morales@teqmed.cl",
+    val vehiculoPatente: String = "HK-8932",
+    var sincronizado: Boolean = false,
+    var estadoAprobacion: String = "PENDIENTE", // PENDIENTE, APROBADO, OBSERVADO
+    val observacionJefe: String = "",
+    val costoCombustibleEstimado: Double = 0.0
 )
