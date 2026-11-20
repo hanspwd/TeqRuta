@@ -4,6 +4,8 @@ plugins {
     id("com.google.devtools.ksp") version "2.3.6"
 }
 
+val apiBaseUrl: String = (project.findProperty("teqrutaApiBaseUrl") as String?) ?: "http://10.0.2.2:8080/"
+
 android {
     namespace = "com.teqmed.teqruta"
     compileSdk {
@@ -16,6 +18,9 @@ android {
         targetSdk = 37
         versionCode = 1
         versionName = "1.0"
+
+        // URL del microservicio Spring Boot; se inyecta en BuildConfig para Retrofit.
+        buildConfigField("String", "API_BASE_URL", "\"$apiBaseUrl\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -33,6 +38,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 
@@ -47,7 +53,15 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation("androidx.navigation:navigation-compose:2.8.2")
+
+    // Cliente HTTP contra el microservicio Spring Boot.
+    implementation("com.squareup.retrofit2:retrofit:2.11.0")
+    implementation("com.squareup.retrofit2:converter-gson:2.11.0")
+    implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
+    implementation("androidx.work:work-runtime-ktx:2.10.1")
+
     testImplementation(libs.junit)
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.1")
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     androidTestImplementation(libs.androidx.espresso.core)

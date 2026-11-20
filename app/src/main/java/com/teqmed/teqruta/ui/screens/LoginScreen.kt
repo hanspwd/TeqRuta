@@ -29,14 +29,13 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
+import com.teqmed.teqruta.data.network.NetworkModule
+import com.teqmed.teqruta.data.repository.LoginResult
+import com.teqmed.teqruta.data.repository.RetrofitAuthRepository
 import com.teqmed.teqruta.ui.components.ValidableOutlinedTextField
 import com.teqmed.teqruta.ui.components.clearFocusOnTap
 import com.teqmed.teqruta.utils.ValidationUtils
-
-object SessionManager {
-    var currentRole: String = ""
-    var currentUserEmail: String = ""
-}
+import kotlinx.coroutines.launch
 
 @Composable
 fun LoginScreen(navController: NavController) {
@@ -49,8 +48,11 @@ fun LoginScreen(navController: NavController) {
     
     var showPassword by remember { mutableStateOf(false) }
     var globalError by remember { mutableStateOf<String?>(null) }
-    
+    var isLoading by remember { mutableStateOf(false) }
+
     val haptic = LocalHapticFeedback.current
+    val scope = rememberCoroutineScope()
+    val authRepository = remember { RetrofitAuthRepository(NetworkModule.createAuthService()) }
 
     Column(
         modifier = Modifier
@@ -205,23 +207,27 @@ fun LoginScreen(navController: NavController) {
                         emailError = emailRes.errorMessage
                         passwordError = passRes.errorMessage
 
-                        if (emailRes.isValid && passRes.isValid) {
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            val role = when {
-                                email.trim().lowercase().startsWith("jefe") -> "jefe"
-                                email.trim().lowercase().startsWith("gerencia") -> "gerencia"
-                                email.trim().lowercase().startsWith("admin") -> "admin"
-                                else -> "tecnico" // Default role for standard users
-                            }
-                            SessionManager.currentRole = role
-                            SessionManager.currentUserEmail = email.trim()
-                            navController.navigate("${role}_dashboard") {
-                                popUpTo("login") { inclusive = true }
-                            }
-                        } else {
+                        if (!emailRes.isValid || !passRes.isValid || isLoading) {
                             globalError = "Por favor ingrese un correo y contraseña válidos."
+                            return@Button
+                        }
+
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        globalError = null
+                        isLoading = true
+                        scope.launch {
+                            when (val resultado = authRepository.login(email.trim(), password)) {
+                                is LoginResult.Success -> {
+                                    navController.navigate("${resultado.role}_dashboard") {
+                                        popUpTo("login") { inclusive = true }
+                                    }
+                                }
+                                is LoginResult.Error -> globalError = resultado.message
+                            }
+                            isLoading = false
                         }
                     },
+                    enabled = !isLoading,
                     shape = RoundedCornerShape(12.dp),
                     modifier = Modifier
                         .fillMaxWidth()
@@ -229,7 +235,11 @@ fun LoginScreen(navController: NavController) {
                 ) {
                     Icon(Icons.AutoMirrored.Filled.Login, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Iniciar Sesión", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text(
+                        if (isLoading) "Iniciando sesión..." else "Iniciar Sesión",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             }
         }

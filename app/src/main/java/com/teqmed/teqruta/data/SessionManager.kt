@@ -9,7 +9,8 @@ data class UserProfile(
 )
 
 /**
- * Gestor de sesión global para mantener el estado de autenticación y rol del usuario.
+ * Gestor de sesión global. Conserva los perfiles demo de la UI y, además,
+ * almacena el JWT devuelto por el backend Spring Boot para las peticiones HTTP.
  */
 object SessionManager {
     var currentUser: UserProfile = UserProfile(
@@ -19,6 +20,13 @@ object SessionManager {
         cargo = "Técnico de Servicio en Terreno",
         vehiculoAsignado = "HK-8932 (Toyota Hilux)"
     )
+
+    /** JWT Bearer. Se lee desde el interceptor de OkHttp en cada petición. */
+    var token: String? = null
+        private set
+
+    val vehiculoAsignado: String
+        get() = currentUser.vehiculoAsignado
 
     var currentRole: String
         get() = currentUser.rol
@@ -88,6 +96,26 @@ object SessionManager {
         }
     }
 
+    /** Guarda la sesión real devuelta por POST /api/auth/login. */
+    fun saveBackendSession(
+        role: String,
+        token: String,
+        email: String,
+        nombre: String,
+        cargo: String,
+        vehiculoAsignado: String?
+    ) {
+        currentUser = UserProfile(
+            email = email.trim(),
+            nombre = nombre.ifBlank { email.substringBefore("@") },
+            rol = role,
+            cargo = cargo.ifBlank { "Usuario del sistema" },
+            vehiculoAsignado = vehiculoAsignado?.takeIf { it.isNotBlank() }
+                ?: "HK-8932 (Toyota Hilux)"
+        )
+        this.token = token
+    }
+
     fun logout() {
         currentUser = UserProfile(
             email = "",
@@ -95,6 +123,7 @@ object SessionManager {
             rol = "",
             cargo = ""
         )
+        token = null
     }
 
     fun isLoggedIn(): Boolean = currentUser.email.isNotBlank() && currentUser.rol.isNotBlank()

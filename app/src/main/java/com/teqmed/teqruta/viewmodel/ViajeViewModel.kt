@@ -5,10 +5,15 @@ import android.graphics.Bitmap
 import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.teqmed.teqruta.TeqRutaApp
 import com.teqmed.teqruta.data.AppDatabase
+import com.teqmed.teqruta.data.SessionManager
+import com.teqmed.teqruta.data.network.ApiConfig
+import com.teqmed.teqruta.data.repository.ViajeRepository
 import com.teqmed.teqruta.model.Viaje
 import com.teqmed.teqruta.utils.LocationHelper
 import com.teqmed.teqruta.utils.ValidationUtils
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.util.UUID
@@ -27,6 +32,9 @@ class ViajeViewModel(application: Application) : AndroidViewModel(application) {
 
     private val db = AppDatabase.getDatabase(application)
     private val viajeDao = db.viajeDao()
+    private val viajeRepository: ViajeRepository by lazy {
+        (getApplication() as TeqRutaApp).container.viajeRepository
+    }
 
     // Status of trip
     private val _tripState = MutableStateFlow(TripState.SETUP)
@@ -125,7 +133,7 @@ class ViajeViewModel(application: Application) : AndroidViewModel(application) {
             longitudInicio = -72.1034,
             latitudFin = -37.4697,
             longitudFin = -72.3537,
-            tecnicoEmail = "tecnico@teqruta.cl",
+            tecnicoEmail = "tecnico@teqmed.cl",
             vehiculoPatente = "HK-8932",
             sincronizado = true,
             estadoAprobacion = "APROBADO"
@@ -145,7 +153,7 @@ class ViajeViewModel(application: Application) : AndroidViewModel(application) {
             longitudInicio = -70.6693,
             latitudFin = -34.1708,
             longitudFin = -70.7444,
-            tecnicoEmail = "tecnico@teqruta.cl",
+            tecnicoEmail = "tecnico@teqmed.cl",
             vehiculoPatente = "HK-8932",
             sincronizado = false,
             estadoAprobacion = "PENDIENTE"
@@ -303,8 +311,8 @@ class ViajeViewModel(application: Application) : AndroidViewModel(application) {
                 longitudInicio = _locationInicio.value?.longitude,
                 latitudFin = _locationFin.value?.latitude,
                 longitudFin = _locationFin.value?.longitude,
-                tecnicoEmail = "tecnico@teqruta.cl",
-                vehiculoPatente = _vehiculoPatente.value,
+                tecnicoEmail = SessionManager.currentUserEmail.ifBlank { "tecnico@teqmed.cl" },
+                vehiculoPatente = ApiConfig.normalizarPatente(_vehiculoPatente.value),
                 sincronizado = false,
                 estadoAprobacion = "PENDIENTE"
             )
@@ -319,13 +327,10 @@ class ViajeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /** Envía los viajes pendientes al backend; solo marca como sincronizados los UUID aceptados. */
     fun sincronizarPendientes() {
-        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-            val pendientes = viajeDao.getViajesPendientes()
-            if (pendientes.isNotEmpty()) {
-                val uuids = pendientes.map { it.uuid }
-                viajeDao.marcarComoSincronizados(uuids)
-            }
+        viewModelScope.launch(Dispatchers.IO) {
+            viajeRepository.sincronizarPendientes()
         }
     }
 }

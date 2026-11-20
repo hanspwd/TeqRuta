@@ -16,6 +16,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.compose.*
+import com.teqmed.teqruta.data.SessionManager
 import com.teqmed.teqruta.viewmodel.ViajeViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -110,8 +111,7 @@ fun AppNavigation(viewModel: ViajeViewModel) {
                 Button(
                     onClick = {
                         showLogoutDialog = false
-                        SessionManager.currentRole = ""
-                        SessionManager.currentUserEmail = ""
+                        SessionManager.logout()
                         navController.navigate("login") {
                             popUpTo(0) { inclusive = true }
                         }

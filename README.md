@@ -21,9 +21,9 @@ Diseñada con un enfoque **Offline-First**, asegurando que los técnicos puedan 
 ### 2. Backend (API REST)
 Sistema centralizado para la validación, almacenamiento y cálculo de costos.
 
-*   **Framework:** Flask (Python).
-*   **Estructura:** Patrón de Blueprints para modularizar la aplicación (Auth, Viajes, Reportes, Mantenedores).
-*   **Base de Datos:** PostgreSQL/MySQL a través de SQLAlchemy (ORM).
+*   **Framework:** Spring Boot (Java 25), portado desde la API Flask original, que se conserva solo como referencia.
+*   **Estructura:** Controladores REST por dominio (Auth, Viajes, Reportes, Mantenedores).
+*   **Base de Datos:** JPA/H2 en memoria con datos seed (configurable a PostgreSQL).
 *   **Seguridad:** Autenticación basada en JSON Web Tokens (JWT) y contraseñas encriptadas con Bcrypt. Control de acceso basado en roles (**RBAC**) diferenciando perfiles para:
     *   *Técnicos:* Registro de rutas, odometría, peajes y eventos.
     *   *Jefatura:* Validación, aprobación o rechazo de kilometrajes con notificación simulada por correo.
@@ -44,10 +44,13 @@ Sistema centralizado para la validación, almacenamiento y cálculo de costos.
     *   `app/models.py`: Modelos de base de datos (SQLAlchemy).
 
 ## Estado de Desarrollo y Siguientes Pasos
-El sistema actual cuenta con un MVP robusto e interactivo implementado tanto en el cliente Android como en la estructura de backend. Las siguientes iteraciones contemplan:
-1.  Integrar `WorkManager` en Android para automatizar la sincronización en segundo plano con la API REST.
+El sistema cuenta con un MVP funcional: la app Android está conectada al microservicio Spring Boot
+mediante Retrofit/JWT, con sincronización periódica `WorkManager` y cálculo de costos con fallback
+de combustible. Detalle de credenciales, configuración y verificación en
+[`docs/PREPARACION_API.md`](docs/PREPARACION_API.md). Siguientes pasos:
+1.  Configurar la firma del APK release (actualmente se genera `app-release-unsigned.apk`).
 2.  Despliegue formal del Dashboard Web administrativo.
-3.  Conexión con servicios externos de telemetría y precios de combustibles.
+3.  Publicar el microservicio en un túnel/servidor accesible desde dispositivos físicos.
 
 ---
 
