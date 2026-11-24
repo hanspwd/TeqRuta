@@ -2,7 +2,7 @@ package com.teqmed.teqruta.data.network.dto
 
 import com.google.gson.annotations.SerializedName
 
-/** Envoltura identica a la del backend Spring Boot: {"data": ..., "message": ..., "meta": ...}. */
+/** Envoltura idéntica a la de la API TeqRuta: {"data": ..., "message": ..., "meta": ...}. */
 data class ApiEnvelope<T>(
     val data: T?,
     val message: String? = null,

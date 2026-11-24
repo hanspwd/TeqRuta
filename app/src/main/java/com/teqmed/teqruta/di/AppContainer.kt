@@ -7,7 +7,7 @@ import com.teqmed.teqruta.data.repository.AuthRepository
 import com.teqmed.teqruta.data.repository.RetrofitAuthRepository
 import com.teqmed.teqruta.data.repository.ViajeRepository
 
-/** Contenedor manual de dependencias con el backend Spring Boot ya conectado. */
+/** Contenedor manual de dependencias con la API TeqRuta ya conectada. */
 class AppContainer(context: Context) {
     private val database = AppDatabase.getDatabase(context.applicationContext)
     private val api = NetworkModule.createApi()

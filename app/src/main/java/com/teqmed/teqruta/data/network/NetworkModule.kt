@@ -24,7 +24,8 @@ object NetworkModule {
     private val authInterceptor = Interceptor { chain ->
         val request = chain.request().newBuilder()
             .header("Accept", "application/json")
-            // Necesario con Ngrok free; inofensivo contra un servidor local.
+            // Ngrok free intercepta navegadores con una página HTML de advertencia.
+            // Este header la omite; contra un servidor local es inofensivo.
             .header("Ngrok-Skip-Browser-Warning", "1")
 
         SessionManager.token?.takeIf { it.isNotBlank() }?.let { token ->

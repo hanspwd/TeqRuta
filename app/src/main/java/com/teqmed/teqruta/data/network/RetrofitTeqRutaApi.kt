@@ -25,7 +25,7 @@ internal interface TeqRutaService {
     suspend fun sincronizar(@Body body: SyncRequestWire): Response<ApiEnvelope<SyncResponseWire>>
 }
 
-/** Implementación real del contrato contra el microservicio Spring Boot. */
+/** Implementación real del contrato contra la API TeqRuta. */
 class RetrofitTeqRutaApi internal constructor(
     private val service: TeqRutaService
 ) : TeqRutaApi {

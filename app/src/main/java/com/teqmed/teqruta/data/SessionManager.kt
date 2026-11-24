@@ -10,7 +10,7 @@ data class UserProfile(
 
 /**
  * Gestor de sesión global. Conserva los perfiles demo de la UI y, además,
- * almacena el JWT devuelto por el backend Spring Boot para las peticiones HTTP.
+ * almacena el JWT devuelto por el backend TeqRuta para las peticiones HTTP.
  */
 object SessionManager {
     var currentUser: UserProfile = UserProfile(

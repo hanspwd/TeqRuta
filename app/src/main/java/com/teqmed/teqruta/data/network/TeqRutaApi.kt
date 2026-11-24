@@ -5,7 +5,7 @@ import com.teqmed.teqruta.data.network.dto.TarifaCombustibleDto
 import com.teqmed.teqruta.data.network.dto.ViajeDto
 
 /**
- * Contrato de comunicación con el backend Spring Boot.
+ * Contrato de comunicación con la API TeqRuta.
  *
  * La interfaz de dominio no tiene anotaciones HTTP: [RetrofitTeqRutaApi] es la
  * implementación real y [StubTeqRutaApi] se conserva como doble de pruebas.

@@ -12,7 +12,7 @@ import com.teqmed.teqruta.TeqRutaApp
 import java.util.concurrent.TimeUnit
 
 /**
- * Sincronización en segundo plano contra el microservicio Spring Boot.
+ * Sincronización en segundo plano contra la API TeqRuta.
  * Envía los viajes pendientes cada 15 minutos cuando hay conexión.
  */
 class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {

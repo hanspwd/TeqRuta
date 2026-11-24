@@ -3,7 +3,7 @@ package com.teqmed.teqruta.data.network.dto
 import com.teqmed.teqruta.model.Viaje
 
 /**
- * DTOs del contrato HTTP. El backend Spring Boot exige tecnicoEmail y vehiculoPatente
+ * DTOs del contrato HTTP. La API TeqRuta exige tecnicoEmail y vehiculoPatente
  * en cada viaje del lote de sincronización.
  */
 

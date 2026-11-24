@@ -7,7 +7,7 @@ import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.POST
 
-/** Servicio de autenticación del backend Spring Boot. */
+/** Servicio de autenticación de la API TeqRuta. */
 interface AuthService {
     @POST("api/auth/login")
     suspend fun login(@Body request: LoginRequestWire): Response<ApiEnvelope<LoginDataWire>>

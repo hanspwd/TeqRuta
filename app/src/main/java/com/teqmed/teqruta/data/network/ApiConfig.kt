@@ -2,7 +2,12 @@ package com.teqmed.teqruta.data.network
 
 import com.teqmed.teqruta.BuildConfig
 
-/** Configuración de red del backend Spring Boot. */
+/**
+ * Configuración de red del backend.
+ *
+ * En desarrollo apunta al emulador; con Ngrok recibe una URL HTTPS pública
+ * (sin puerto visible) generada por TeqRuta-API/scripts/tunel.py.
+ */
 object ApiConfig {
     /** BaseUrl de Retrofit siempre termina en '/'; se normaliza si viene sin ella. */
     val baseUrl: String = BuildConfig.API_BASE_URL.trim().let {

@@ -1,15 +1,15 @@
-# Integración con la API TeqRuta
+# Integración con TeqRuta-API
 
-Estado: **la app YA está conectada al microservicio Spring Boot**. Ya no usa el stub
-en ejecución; el stub se conserva únicamente como doble de pruebas unitarias.
+Detalle técnico de cómo la app consume la API Flask publicada por Ngrok.
 
-## Backend
+- API: <https://github.com/Willy-Duoc/TeqRuta-API>
+- App: <https://github.com/hanspwd/TeqRuta>
 
-- Proyecto: `C:\Users\Mango\Desktop\Proyectos\TeqRuta-Backend`
-- Contrato y variables de entorno: `TeqRuta-Backend\README.md`
-- Ejecución local: `.\gradlew.bat bootRun` (puerto 8080 por defecto).
+## Requisitos de integración
 
-## Credenciales reales (seed del backend)
+- Flask escucha en `127.0.0.1:5000` (loopback); Ngrok es la única salida pública HTTPS.
+- La app usa la URL pública, nunca `127.0.0.1` ni el puerto interno.
+- Credenciales demo creadas por el seed de la API:
 
 | Correo | Password | Rol |
 |---|---|---|
@@ -18,62 +18,103 @@ en ejecución; el stub se conserva únicamente como doble de pruebas unitarias.
 | `gerencia@teqmed.cl` | `gerencia123` | gerencia |
 | `admin@teqmed.cl` | `admin123` | admin |
 
-Ya no sirven los correos `@teqruta.cl` del stub.
+## Archivos de integración en la app
 
-## Cambios realizados en la app
-
-| Archivo | Cambio |
+| Archivo | Responsabilidad |
 |---|---|
-| `data/network/NetworkModule.kt` | Cliente Retrofit + OkHttp con interceptor de `Authorization: Bearer`, `Accept`, `Ngrok-Skip-Browser-Warning` y timeouts. |
-| `data/network/ApiConfig.kt` | Normaliza la base URL (siempre termina en `/`) y define la patente demo por defecto. |
-| `data/network/RetrofitTeqRutaApi.kt` | Implementación real de `TeqRutaApi`: destinos, tarifa y `POST /api/viajes/sync`. |
-| `data/network/AuthService.kt` + `data/network/dto/ApiWireDtos.kt` | Servicio y DTOs del contrato JSON (envoltura `data/message/meta`). |
-| `data/network/ApiErrorParser.kt` | Traduce errores HTTP/red a mensajes de UI. |
-| `data/repository/RetrofitAuthRepository.kt` | `POST /api/auth/login`, guarda JWT y perfil en `SessionManager`. |
-| `data/repository/ViajeRepository.kt` | Envía `tecnicoEmail` y `vehiculoPatente`; marca como sincronizados solo los UUID aceptados. |
-| `data/SessionManager.kt` | Conserva los perfiles demo de la UI y guarda `token`, `email`, `rol` y `vehiculoAsignado` del backend. |
-| `ui/screens/LoginScreen.kt` | Llama a `POST /api/auth/login` de forma real; muestra el error del servidor y navega según el rol devuelto. |
-| `ui/screens/AppNavigation.kt` | Usa el `SessionManager` unificado y cierra la sesión limpiando el JWT. |
-| `viewmodel/ViajeViewModel.kt` | `sincronizarPendientes()` usa el repositorio HTTP; los viajes guardados llevan el email/patente de la sesión. |
-| `TeqRutaApp.kt` + `worker/SyncWorker.kt` | Contenedor de dependencias y sincronización periódica cada 15 min con red. |
-| `data/network/dto/Dtos.kt` | `ViajeDto` ampliado con los campos exigidos por el backend. |
-| `di/AppContainer.kt` | Inyecta el repositorio de auth real. |
-| `gradle.properties` / `app/build.gradle.kts` | Configuración de `teqrutaApiBaseUrl` ya activa y dependencias Retrofit/OkHttp/WorkManager. |
+| `data/network/NetworkModule.kt` | Retrofit + OkHttp; agrega `Authorization`, `Accept`, `Ngrok-Skip-Browser-Warning` y timeouts. |
+| `data/network/ApiConfig.kt` | Normaliza la base URL y define la patente demo por defecto. |
+| `data/network/RetrofitTeqRutaApi.kt` | Implementa destinos, tarifa y sincronización. |
+| `data/network/AuthService.kt` + `data/network/dto/` | Login y DTOs del contrato `data/message/meta`. |
+| `data/network/ApiErrorParser.kt` | Convierte errores HTTP/red en mensajes de UI. |
+| `data/repository/RetrofitAuthRepository.kt` | Login, guarda JWT/perfil en `SessionManager`. |
+| `data/repository/ViajeRepository.kt` | Envía `tecnicoEmail` y `vehiculoPatente`; marca solo UUID aceptados. |
+| `data/SessionManager.kt` | Sesión, token, rol y vehículo asignado. |
+| `ui/screens/LoginScreen.kt` | Login real y navegación según el rol devuelto. |
+| `viewmodel/ViajeViewModel.kt` | Sincronización manual contra el repositorio HTTP. |
+| `TeqRutaApp.kt` + `worker/SyncWorker.kt` | Contenedor de dependencias y sync periódica cada 15 min. |
+| `di/AppContainer.kt` | Inyección del repositorio de autenticación real. |
 
-La UI y Room se conservan del estado remoto; solo se conectan los puntos de entrada a la API.
+## URL del backend
+
+Prioridad:
+
+```text
+-PteqrutaApiBaseUrl  >  TEQRUTA_API_BASE_URL  >  local.properties  >  http://10.0.2.2:5000/
+```
+
+`10.0.2.2:5000` es solo el host del emulador para desarrollo local; un teléfono físico
+debe usar la URL HTTPS de Ngrok.
+
+Con ambos repositorios hermanos:
+
+```bash
+cd ../TeqRuta-API
+make setup          # crea .env, .venv e instala Ngrok si falta
+# edita .env -> NGROK_AUTHTOKEN=...
+make publicar       # Flask loopback + túnel y escribe local.properties
+cd ../TeqRuta
+./gradlew :app:printApiBaseUrl
+```
+
+Resultado esperado:
+
+```text
+API_BASE_URL=https://mi-dominio.ngrok-free.dev/
+```
+
+Si la app está en otra ruta:
+
+```bash
+cd /ruta/TeqRuta-API
+TEQRUTA_APP_DIR=/ruta/TeqRuta make publicar
+```
+
+El script preserva `sdk.dir` en `local.properties`. Si el archivo no existe, Android
+Studio lo completa al sincronizar; para CLI agrégalo manualmente.
+
+### Cuándo recompilar
+
+- `NGROK_DOMAIN` fijo (recomendado): la URL no cambia; el APK sigue funcionando.
+- Sin dominio estático: Ngrok puede asignar otra URL en cada inicio; reconstruye el APK.
+- Cambios manuales de URL: ejecuta `./gradlew :app:assembleDebug` para reinyectar
+  `BuildConfig.API_BASE_URL`.
 
 ## Flujo de sincronización
 
-1. Login → `data.access_token` se guarda en `SessionManager`.
-2. El interceptor agrega `Authorization: Bearer <token>` a cada petición.
-3. `SyncWorker` llama a `sincronizarPendientes()` cada 15 min con red.
-4. `POST /api/viajes/sync` responde 200 o 207; se aceptan los UUID de `data.viajes`
-   (insertados **y** duplicados). Los de `data.rechazados` quedan pendientes.
-5. Si no hay token, no se envía el lote (evita 401 innecesarios).
-
-Si el usuario autenticado no tiene patente asignada se usa `HK-8932` (valor del seed demo).
-
-## Configurar la URL
-
-En `gradle.properties`:
-
-```properties
-# Emulador
-teqrutaApiBaseUrl=http://10.0.2.2:8080/
-# Dispositivo físico: IP de la máquina que corre el backend
-# Ngrok free (el interceptor ya agrega la cabecera requerida):
-# teqrutaApiBaseUrl=https://xxxx.ngrok-free.app/
-```
-
-Debe terminar en `/`. El debug manifest permite HTTP claro; release debe usar HTTPS.
+1. Login → se guarda `access_token` en `SessionManager`.
+2. El interceptor agrega `Authorization: Bearer <token>`.
+3. `SyncWorker` o el ViewModel llaman a `sincronizarPendientes()`.
+4. `POST /api/viajes/sync` responde `200` o `207`; se aceptan UUID insertados y
+   duplicados. Los rechazados quedan pendientes.
+5. Si no hay token, no se envía el lote para evitar `401`.
 
 ## Verificación
 
-```powershell
-.\gradlew.bat :app:testDebugUnitTest :app:assembleDebug
+```bash
+# App
+cd TeqRuta
+./gradlew :app:printApiBaseUrl :app:testDebugUnitTest :app:assembleDebug
+
+# API
+cd ../TeqRuta-API
+make test        # 30 pruebas
+make smoke-local # E2E contra 127.0.0.1:5000
+make smoke       # 12 verificaciones E2E contra la URL pública
 ```
 
-Resultado: `BUILD SUCCESSFUL` con **10 pruebas unitarias** (5 de reglas de negocio + 5 de integración con servicios falsos).
+### Prueba instrumentada real
 
-Smoke HTTP real contra el backend: login → 5 destinos → tarifa 1597 CLP →
-`POST /api/viajes/sync` HTTP 200 con 1 viaje insertado.
+Con túnel activo, emulador/dispositivo conectado y APKs construidos:
+
+```bash
+cd TeqRuta
+./gradlew :app:assembleDebugAndroidTest
+adb install -r app/build/outputs/apk/debug/app-debug.apk
+adb install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+adb shell am instrument -w -e teqrutaLive 1 \
+  com.teqmed.teqruta.test/androidx.test.runner.AndroidJUnitRunner
+```
+
+Sin `-e teqrutaLive 1` la prueba se omite. Valida login, permisos, 5 destinos y tarifa
+con el mismo cliente OkHttp/Retrofit de la app.
