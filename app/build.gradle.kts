@@ -1,3 +1,4 @@
+import java.io.File
 import java.util.Properties
 
 plugins {
@@ -30,6 +31,16 @@ require(apiBaseUrl.startsWith("http://") || apiBaseUrl.startsWith("https://")) {
     "teqrutaApiBaseUrl debe empezar con http:// o https:// (valor actual: $apiBaseUrl)"
 }
 
+// DSN de Sentry para el reporte de errores en producción. Es opcional: si queda
+// vacío, el SDK no se inicializa (ver TeqRutaApp). Prioridad: Gradle (-P), variable
+// de entorno, local.properties o vacío.
+val sentryDsn: String = (
+    project.findProperty("teqrutaSentryDsn") as String?
+        ?: providers.environmentVariable("TEQRUTA_SENTRY_DSN").orNull
+        ?: localProperties.getProperty("teqrutaSentryDsn")
+        ?: ""
+).trim()
+
 // Tarea de diagnóstico: ./gradlew :app:printApiBaseUrl
 // La URL se pasa como input para no capturar el script y romper la configuration cache.
 tasks.register("printApiBaseUrl") {
@@ -37,6 +48,49 @@ tasks.register("printApiBaseUrl") {
     doLast {
         println("API_BASE_URL=${inputs.properties["apiBaseUrl"]}")
     }
+}
+
+// ---------------------------------------------------------------------------
+// Firma de release (el keystore SIEMPRE vive fuera del repositorio)
+// ---------------------------------------------------------------------------
+// Prioridad para localizar credenciales:
+//   1. Variables de entorno (CI): TEQRUTA_KEYSTORE_PROPERTIES apunta al archivo
+//      .properties; TEQRUTA_KEYSTORE_FILE/_PASSWORD/_ALIAS/_KEY_PASSWORD sobrescriben campos.
+//   2. ~/.config/teqruta/keystore.properties (lo crea scripts/generar_keystore.sh).
+// Si no hay credenciales, el APK release se genera sin firmar y el build no falla.
+val keystorePropertiesPath: String? =
+    providers.environmentVariable("TEQRUTA_KEYSTORE_PROPERTIES").orNull
+        ?: File(System.getProperty("user.home"), ".config/teqruta/keystore.properties")
+            .takeIf { it.isFile }?.absolutePath
+
+val keystoreProperties: Properties? = keystorePropertiesPath
+    ?.takeIf { File(it).isFile }
+    ?.let { ruta -> Properties().apply { File(ruta).inputStream().use { load(it) } } }
+
+val keystorePropertiesDir: File? = keystorePropertiesPath?.let { File(it).parentFile }
+
+fun credencial(nombre: String, env: String): String? =
+    providers.environmentVariable(env).orNull ?: keystoreProperties?.getProperty(nombre)
+
+val releaseStoreFile: File? = credencial("storeFile", "TEQRUTA_KEYSTORE_FILE")?.let { valor ->
+    val archivo = File(valor)
+    (if (archivo.isAbsolute) archivo else File(keystorePropertiesDir ?: rootDir, valor))
+        .takeIf { it.isFile }
+}
+val releaseStorePassword = credencial("storePassword", "TEQRUTA_KEYSTORE_PASSWORD")
+val releaseKeyAlias = credencial("keyAlias", "TEQRUTA_KEY_ALIAS")
+val releaseKeyPassword = credencial("keyPassword", "TEQRUTA_KEY_PASSWORD")
+
+val firmaReleaseConfigurada = releaseStoreFile != null &&
+    !releaseStorePassword.isNullOrBlank() &&
+    !releaseKeyAlias.isNullOrBlank() &&
+    !releaseKeyPassword.isNullOrBlank()
+
+if (!firmaReleaseConfigurada) {
+    logger.lifecycle(
+        "[TeqRuta] Firma release no configurada: el APK release quedará SIN FIRMAR. " +
+            "Ejecuta scripts/generar_keystore.sh para habilitarla."
+    )
 }
 
 android {
@@ -55,13 +109,30 @@ android {
         // URL de la API TeqRuta; se inyecta en BuildConfig para Retrofit.
         buildConfigField("String", "API_BASE_URL", "\"$apiBaseUrl\"")
 
+        // DSN opcional de Sentry (reporte de errores en producción).
+        buildConfigField("String", "SENTRY_DSN", "\"$sentryDsn\"")
+
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    signingConfigs {
+        if (firmaReleaseConfigurada) {
+            create("release") {
+                storeFile = releaseStoreFile
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
     }
 
     buildTypes {
         release {
             optimization {
                 enable = false
+            }
+            if (firmaReleaseConfigurada) {
+                signingConfig = signingConfigs.getByName("release")
             }
         }
     }
@@ -92,6 +163,9 @@ dependencies {
     implementation("com.squareup.retrofit2:converter-gson:2.11.0")
     implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
     implementation("androidx.work:work-runtime-ktx:2.10.1")
+
+    // Reporte de errores en producción; se activa solo si BuildConfig.SENTRY_DSN tiene valor.
+    implementation(libs.sentry.android)
 
     testImplementation(libs.junit)
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.1")

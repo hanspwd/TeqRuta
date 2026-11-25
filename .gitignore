@@ -30,6 +30,7 @@ app/build/
 *.jks
 *.keystore
 key.properties
+keystore.properties
 
 # Google Services (if used later)
 google-services.json

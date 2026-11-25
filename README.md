@@ -36,6 +36,8 @@ con la API central cuando hay conexión.
 | Red | Retrofit 2.11 + OkHttp 4.12 + Gson |
 | Sesión | JWT en `SessionManager` |
 | Trabajo en segundo plano | WorkManager |
+| Observabilidad | Sentry Android 8.65 (opcional, vía `SENTRY_DSN`) |
+| Firma release | Keystore y credenciales fuera del repositorio (`~/.config/teqruta`) |
 | Build | AGP 9.3, Gradle 9.6, KSP, compileSdk/targetSdk 37, minSdk 26 |
 
 ## 3. Estructura del repositorio
@@ -177,7 +179,56 @@ En Android Studio: **Open** → selecciona la carpeta `TeqRuta` → espera el *G
 sdk.dir=/ruta/a/Android/Sdk
 ```
 
-El build **release** aún no está firmado; para la entrega académica se usa el APK debug.
+El build **release** queda firmado automáticamente cuando existen credenciales (ver
+abajo); si no, se genera sin firmar y el comando no falla.
+
+### Firma del APK release (keystore fuera del repositorio)
+
+El keystore y sus credenciales **nunca** se versionan: se guardan en
+`~/.config/teqruta/` (permisos `600`) y Gradle los detecta automáticamente.
+
+```bash
+# 1) Genera el keystore y keystore.properties (una sola vez, con JDK instalado)
+bash scripts/generar_keystore.sh
+
+# 2) Compila el APK release firmado
+./gradlew :app:assembleRelease
+# Salida: app/build/outputs/apk/release/app-release.apk (firmado)
+
+# 3) Verifica la firma
+/opt/android-sdk/build-tools/*/apksigner verify --print-certs \
+  app/build/outputs/apk/release/app-release.apk
+```
+
+Gradle resuelve las credenciales en este orden:
+
+1. variables de entorno `TEQRUTA_KEYSTORE_PROPERTIES` (ruta al `.properties`) y
+   `TEQRUTA_KEYSTORE_FILE` / `TEQRUTA_KEYSTORE_PASSWORD` / `TEQRUTA_KEY_ALIAS` /
+   `TEQRUTA_KEY_PASSWORD` (útil en CI con secretos);
+2. `~/.config/teqruta/keystore.properties` (lo crea el script).
+
+Respalda el `.jks` y el `.properties`: si los pierdes no podrás publicar
+actualizaciones firmadas con la misma clave. Ambos están en `.gitignore`.
+
+### Reporte de errores con Sentry
+
+Sentry es **opcional**: sin DSN la app no inicializa el SDK. El DSN se inyecta en
+`BuildConfig.SENTRY_DSN` (prioridad: `-PteqrutaSentryDsn`, variable
+`TEQRUTA_SENTRY_DSN` o `local.properties`).
+
+```bash
+./gradlew :app:assembleRelease -PteqrutaSentryDsn=https://public@o0.ingest.sentry.io/0
+```
+
+`TeqRutaApp` inicializa Sentry solo cuando hay DSN (`environment` = debug/production,
+`tracesSampleRate = 0`, sin PII). El auto-init del manifest está desactivado.
+
+### Integración continua (CI)
+
+`.github/workflows/ci.yml` ejecuta en cada push/PR: pruebas unitarias, `assembleDebug`
+y `assembleRelease`, y publica los APK como artefactos. El release se firma si están
+definidos los secretos `TEQRUTA_KEYSTORE_BASE64`, `TEQRUTA_KEYSTORE_PASSWORD`,
+`TEQRUTA_KEY_ALIAS` y `TEQRUTA_KEY_PASSWORD`; si no, se genera sin firmar.
 
 ### Prueba instrumentada contra la API pública
 
@@ -229,7 +280,7 @@ El contrato completo, endpoints, variables de entorno y despliegue están en el
 |---|---|---|
 | Unitarias Android | `./gradlew :app:testDebugUnitTest` | 10 tests, 0 fallos |
 | Instrumentadas Android | ver sección 7 | 2 tests, 0 fallos |
-| API (pytest) | `cd ../TeqRuta-API && make test` | 30 tests |
+| API (pytest) | `cd ../TeqRuta-API && make test` | 41 tests |
 | Smoke E2E público | `cd ../TeqRuta-API && make smoke` | 12/12 OK |
 
 Las unitarias usan servicios falsos y no requieren red. Las instrumentadas y el smoke
@@ -262,12 +313,16 @@ validan el túnel HTTPS real.
 
 ## 12. Estado y siguientes pasos
 
-MVP funcional y probado contra la API pública. Pendientes:
+MVP funcional y probado contra la API pública. Completado:
 
-1. Firma del APK release y keystore fuera del repositorio.
-2. Pipeline CI para unitarias + build.
-3. Dashboard web administrativo.
-4. Migración a PostgreSQL y despliegue con Gunicorn/Nginx para producción.
+1. Firma del APK release con keystore fuera del repositorio (`scripts/generar_keystore.sh`).
+2. Pipeline CI para unitarias + build (`.github/workflows/ci.yml`).
+3. Reporte de errores en producción con Sentry (Android y Flask).
+4. Dashboard web administrativo en la API (`/admin`).
+5. Migración a PostgreSQL y despliegue con Gunicorn/Nginx (Docker Compose).
+
+Siguientes pasos sugeridos: configurar un dominio HTTPS propio, programar respaldos de
+PostgreSQL y publicar la app en un canal controlado con la firma release.
 
 ## 13. Contexto académico
 

@@ -25,6 +25,11 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.TeqRuta">
 
+        <!-- Sentry: se inicializa manualmente en TeqRutaApp solo si hay DSN. -->
+        <meta-data
+            android:name="io.sentry.auto-init"
+            android:value="false" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
