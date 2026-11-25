@@ -31,7 +31,21 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - uses: android-actions/setup-android@v3
+      # Los runners ubuntu-latest ya traen el SDK de Android instalado. Se usa ese
+      # (en lugar de android-actions/setup-android, que falla al pedir el paquete
+      # "tools" eliminado) y se aceptan licencias / instalan componentes faltantes.
+      - name: Preparar SDK de Android
+        run: |
+          set -e
+          SDK="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
+          echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
+          SM="$(find "$SDK/cmdline-tools" -maxdepth 4 -type f -name sdkmanager 2>/dev/null | head -1)"
+          if [ -z "$SM" ]; then SM="$(command -v sdkmanager || true)"; fi
+          if [ -n "$SM" ] && [ -x "$SM" ]; then
+            yes | "$SM" --licenses > /dev/null 2>&1 || true
+            "$SM" --install "platform-tools" "platforms;android-37" "build-tools;37.0.0" > /dev/null 2>&1 || true
+          fi
 
       - uses: gradle/actions/setup-gradle@v4
 
